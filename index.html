@@ -97,15 +97,16 @@ button.stat:active{filter:brightness(.97)}
 /* treemap */
 .a-map{display:flex;flex-direction:column}
 @media (max-width:767px){.a-hero{order:0}.a-map{order:1}.a-sum{order:2}.a-div{order:3}.a-reb{order:4}}
-.tm{position:relative;height:320px;border-radius:12px;overflow:hidden;flex:1 1 auto;min-height:260px}
+.tm{position:relative;height:440px;border-radius:12px;overflow:hidden;flex:1 1 auto;min-height:260px}
 .tile{position:absolute;border:2px solid var(--surface);border-radius:10px;padding:8px 10px;display:flex;flex-direction:column;justify-content:space-between;overflow:hidden;text-align:left;color:var(--text);transition:filter .15s}
 .tile:hover{filter:brightness(1.06)} .tile:active{filter:brightness(.95)}
 .tile.on{color:#fff}
-.tile .tn{font-size:13px;font-weight:650;line-height:1.3;word-break:keep-all;overflow-wrap:anywhere}
-.tile .tp{font-size:17px;font-weight:750;letter-spacing:-.02em;line-height:1.2}
-.tile .tw{font-size:12px;opacity:.85;font-weight:500}
-.tile.sm{padding:6px 7px}.tile.sm .tn{font-size:12px}.tile.sm .tp{font-size:13px}
-.tile.xs{justify-content:center;align-items:center;padding:2px}.tile.xs .tn{font-size:11px;text-align:center}
+.tile .tn{font-size:13px;font-weight:650;line-height:1.3;word-break:keep-all;overflow-wrap:anywhere;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.tile .tq{display:block;font-size:12px;opacity:.85;font-weight:500;margin-top:2px}
+.tile .tv{display:block;font-size:16px;font-weight:750;letter-spacing:-.02em;line-height:1.25}
+.tile .tr{display:block;font-size:12.5px;font-weight:650;opacity:.92;margin-top:1px}
+.tile.sm{padding:6px 7px}.tile.sm .tn{font-size:12px}.tile.sm .tv{font-size:13px}.tile.sm .tr{font-size:11.5px}
+.tile.xs{justify-content:center;align-items:center;padding:2px;text-align:center}.tile.xs .tn{font-size:11px}.tile.xs .tr{font-size:11px}
 .scale{display:flex;align-items:center;gap:8px;margin-top:12px;font-size:12px;color:var(--text-3);flex-wrap:wrap}
 .scale i{display:block;width:96px;height:6px;border-radius:9px;background:linear-gradient(90deg,var(--down),var(--surface-2),var(--up))}
 .scale em{font-style:normal;margin-left:auto}
@@ -300,7 +301,7 @@ select.chip{-webkit-appearance:none;appearance:none;padding-right:30px;backgroun
         <div class="card a-map">
           <h2>보유 비중 <button class="link" data-go="hold">전체 <svg class="i s"><use href="#i-chev"/></svg></button></h2>
           <div class="tm" id="treemap" role="list" aria-label="보유종목 비중 지도"></div>
-          <div class="scale"><span>-30%</span><i></i><span>+30%</span><em>칸 크기 = 비중 · 색 = 평가수익률</em></div>
+          <div class="scale"><span>-30%</span><i></i><span>+30%</span><em>칸 크기 = 보유 비중 · 색 = 평가수익률</em></div>
         </div>
         <div class="card a-reb">
           <h2>비중 관리 <small>목표 대비 조정금액</small></h2>
@@ -556,11 +557,11 @@ function drawTreemap(c=calc()){
   const hs=[...c.held].sort((a,b)=>b.val-a.val), tot=hs.reduce((a,h)=>a+h.val,0);
   const rects=squarify(hs.map(h=>({it:h,area:h.val/tot*W*H})),0,0,W,H,[]);
   el.innerHTML=rects.map(({it:h,x,y,w,h:hh})=>{
-    const t=heat(h.evR), size=w>118&&hh>84?'':w>58&&hh>46?'sm':'xs';
-    const name=size==='xs'?h.ab:size==='sm'?core(h.n):h.n;
-    return `<button class="tile ${size} ${t.on?'on':''}" role="listitem" data-stock="${h.n}" aria-label="${h.n} 비중 ${pp(h.w,1)} 수익률 ${pct(h.evR)}"
+    const t=heat(h.evR), size=w>=150&&hh>=124?'':w>=86&&hh>=74?'sm':'xs', wide=w>=200;
+    const name=size==='xs'?h.ab:h.n;
+    return `<button class="tile ${size} ${t.on?'on':''}" role="listitem" data-stock="${h.n}" aria-label="${h.n} ${h.qty}주 평가금액 ${won(h.val)} 수익률 ${pct(h.evR)}"
       style="left:${x/W*100}%;top:${y/H*100}%;width:${w/W*100}%;height:${hh/H*100}%;background:${t.bg}">
-      <span class="tn">${name}</span>${size==='xs'?'':`<span><span class="tp num" style="display:block">${pct(h.evR,1)}</span>${size?'':`<span class="tw num">비중 ${pp(h.w,1)}</span>`}</span>`}</button>`}).join('');
+      <span><span class="tn">${name}</span>${size?'':`<span class="tq num">${h.qty.toLocaleString()}주</span>`}</span>${size==='xs'?`<span class="tr num">${pct(h.evR,1)}</span>`:`<span><span class="tv num">${won(h.val)}</span><span class="tr num">${!size&&wide?`${sw(h.ev)} (${pct(h.evR)})`:pct(h.evR)}</span></span>`}</button>`}).join('');
 }
 let tmT;addEventListener('resize',()=>{clearTimeout(tmT);tmT=setTimeout(()=>drawTreemap(),120)});
 
