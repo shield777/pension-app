@@ -214,6 +214,19 @@ select.chip{-webkit-appearance:none;appearance:none;padding-right:30px;backgroun
 .toast.on{opacity:1;transform:translate(-50%,0)}
 .badge{font-size:11px;font-weight:700;color:var(--text-2);background:var(--surface-2);padding:3px 8px;border-radius:99px;margin-left:6px;vertical-align:middle}
 
+.btn.ghost{background:var(--surface-2);color:var(--text)}
+.btn:disabled{opacity:.5}
+.gate{position:fixed;inset:0;z-index:80;background:var(--bg);display:grid;place-items:center;padding:24px}
+.gate[hidden],.busy[hidden]{display:none}
+.gate-card{width:100%;max-width:360px;text-align:center}
+.gate-logo{width:56px;height:56px;border-radius:50%;background:var(--brand);color:var(--on-brand);display:grid;place-items:center;margin:0 auto 16px}
+.gate h2{font-size:24px;font-weight:750;margin-bottom:8px}
+.gate p{color:var(--text-2);font-size:15px;margin-bottom:24px}
+.busy{position:fixed;left:50%;top:calc(env(safe-area-inset-top) + 16px);transform:translateX(-50%);z-index:70;background:var(--text);color:var(--bg);border-radius:99px;padding:10px 16px;display:flex;gap:10px;align-items:center;font-size:14px;font-weight:600}
+.spin{width:16px;height:16px;border-radius:50%;border:2px solid currentColor;border-right-color:transparent;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.icon-btn.spinning svg{animation:spin .8s linear infinite}
+.topbtns{display:flex;gap:2px}
 @media (min-width:768px){
   main{padding:24px 28px 40px}
   .tabbar{display:none}
@@ -263,6 +276,7 @@ select.chip{-webkit-appearance:none;appearance:none;padding-right:30px;backgroun
   <symbol id="i-left" viewBox="0 0 24 24"><path d="m15 6-6 6 6 6"/></symbol>
   <symbol id="i-sync" viewBox="0 0 24 24"><path d="M20 11a8 8 0 0 0-14.9-3M4 13a8 8 0 0 0 14.9 3"/><path d="M4 4v4h4M20 20v-4h-4"/></symbol>
   <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></symbol>
+  <symbol id="i-gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></symbol>
   <symbol id="i-sheet" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="M3 9h18M9 21V9"/></symbol>
 </svg>
 
@@ -279,8 +293,8 @@ select.chip{-webkit-appearance:none;appearance:none;padding-right:30px;backgroun
   <main><div class="wrap">
     <section class="view on" id="v-home">
       <div class="top">
-        <div><div class="sub" id="asof"></div><h1>퇴직연금<span class="badge">시안</span></h1></div>
-        <button class="icon-btn" aria-label="엑셀과 동기화" data-sync><svg class="i"><use href="#i-sync"/></svg></button>
+        <div><div class="sub" id="asof"></div><h1>퇴직연금<span class="badge" id="modeBadge">시안</span></h1></div>
+        <div class="topbtns"><button class="icon-btn" aria-label="엑셀에서 다시 불러오기" data-sync id="syncBtn"><svg class="i"><use href="#i-sync"/></svg></button><button class="icon-btn" aria-label="설정" data-settings><svg class="i"><use href="#i-gear"/></svg></button></div>
       </div>
       <div class="grid home-grid">
         <div class="card hero a-hero">
@@ -363,6 +377,7 @@ select.chip{-webkit-appearance:none;appearance:none;padding-right:30px;backgroun
   <form id="addForm" novalidate>
     <div class="field"><label for="fDate" id="fDateL">일자</label><input type="date" id="fDate" required></div>
     <div class="field" data-for="buy sell div"><label for="fCode">종목명</label><select id="fCode"></select></div>
+    <div class="field" id="fNewWrap" hidden><label for="fNew">새 종목명</label><input id="fNew" list="etfList" autocomplete="off" placeholder="예: TIGER 미국배당다우존스"><datalist id="etfList"></datalist><div class="hint">ETF시세 시트에 있는 이름 그대로 입력하면 시세가 연결돼요. 보유 목록에 자동으로 추가되고, 관리비중은 엑셀에서 직접 넣어주세요.</div></div>
     <div class="two" data-for="buy sell">
       <div class="field"><label for="fQty">수량(주)</label><input id="fQty" inputmode="numeric" placeholder="0" autocomplete="off"></div>
       <div class="field"><label for="fAmt2">금액(원)</label><input id="fAmt2" inputmode="numeric" placeholder="0" autocomplete="off"></div>
@@ -383,15 +398,39 @@ select.chip{-webkit-appearance:none;appearance:none;padding-right:30px;backgroun
   <div class="xl"><svg class="i s"><use href="#i-sheet"/></svg><span>엑셀 <b>퇴직연금!U21</b> 칸에 저장돼요.</span></div>
 </div>
 
+<div class="sheet" id="setSheet" role="dialog" aria-modal="true" aria-labelledby="setTitle">
+  <div class="grab"></div>
+  <h3 id="setTitle">설정 <button class="icon-btn" data-close aria-label="닫기"><svg class="i"><use href="#i-x"/></svg></button></h3>
+  <div class="field"><label for="sPath">원드라이브 엑셀 파일 위치</label><input id="sPath" autocomplete="off"><div class="hint">원드라이브 안에서의 경로예요. 예: 주식/0.신_매매관리.xlsx</div></div>
+  <div class="preview" id="sInfo"></div>
+  <button class="btn" id="sSave">저장하고 다시 불러오기</button>
+  <button class="btn ghost" id="sLogout" style="margin-top:10px">로그아웃</button>
+</div>
+
+<div class="gate" id="gate" hidden>
+  <div class="gate-card">
+    <div class="gate-logo"><svg class="i"><use href="#i-pie"/></svg></div>
+    <h2>퇴직연금</h2>
+    <p id="gateMsg">원드라이브의 매매관리 엑셀과 연결하려면<br>Microsoft 계정으로 로그인해 주세요.</p>
+    <button class="btn" id="gateBtn">Microsoft 계정으로 로그인</button>
+  </div>
+</div>
+<div class="busy" id="busy" hidden><span class="spin"></span><span id="busyMsg">엑셀에 저장 중…</span></div>
+
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
+<script src="https://cdn.jsdelivr.net/npm/@azure/msal-browser@3.28.1/lib/msal-browser.min.js"></script>
+<script src="xl.js"></script>
 <script>
 /* 데이터: window.PENSION_DATA (엑셀에서 읽어온 값). 개인 데이터는 저장소에 올리지 않음 */
-const D = window.PENSION_DATA || {asof:new Date().toISOString().slice(0,10),cash:0,hold:[],sold:[],tx:[],div:[],dep:[]};
+const DEMO = !!window.PENSION_DATA;
+let D = window.PENSION_DATA || {asof:new Date().toISOString().slice(0,10),cash:0,hold:[],sold:[],tx:[],div:[],dep:[]};
 const ABBR={'미국S&P500':'S&P','200':'200','고배당주':'고배당','MSCI선진국':'선진국','리츠부동산인프라':'리츠','인도니프티50':'인도','미국테크TOP10채권혼합':'테크','국고채10년':'국채','미국나스닥100':'나스닥','퓨처모빌리티액티브':'모빌','차이나항셍테크':'항셍'};
 const BRAND=/^(TIGER|KODEX|PLUS|KIWOOM|ACE|RISE|SOL|HANARO|KOSEF|ARIRANG)\s/;
 const core=n=>n.replace(BRAND,''), brand=n=>(n.match(BRAND)||['',''])[1];
-const STOCKS=[...D.hold.map(s=>({...s,held:true})),...D.sold.map(s=>({...s,held:false}))].map(s=>({...s,ab:ABBR[core(s.n)]||core(s.n).slice(0,2)}));
+let STOCKS=[];
+function buildStocks(){STOCKS=[...D.hold.map(s=>({...s,held:true})),...D.sold.map(s=>({...s,held:false}))].map(s=>({...s,ab:ABBR[core(s.n)]||core(s.n).slice(0,2)}));}
+buildStocks();
 const shade=(i,n)=>`color-mix(in srgb, var(--text) ${Math.round(88-i*(64/Math.max(n-1,1)))}%, var(--surface-2))`;
 
 const won=n=>Math.round(n).toLocaleString('ko-KR')+'원';
@@ -483,7 +522,7 @@ function render(){
   divBox.innerHTML=row('올해 받은 배당',won(c.thisYear))+row('최근 12개월',won(c.ttmAll))+row('연 배당률 (원금 기준)',c.buy?pp(c.ttmHeld/c.buy):'-');
   const max=Math.max(...c.held.map(x=>Math.max(x.w,x.target)),0.01)*1.12;
   rebal.innerHTML=[...c.held].sort((a,b)=>Math.abs(b.adj)-Math.abs(a.adj)).map(h=>`<div class="rb"><div class="nm">${h.n}</div>
-      <div class="adj num"><em>${h.adj>0?'매수':'매도'}</em>${man(Math.abs(h.adj))}</div>
+      <div class="adj num">${h.target?`<em>${h.adj>0?'매수':'매도'}</em>${man(Math.abs(h.adj))}`:'<em>목표 비중 미설정</em>'}</div>
       <div class="track"><i class="tg" style="width:${h.target/max*100}%"></i><i class="cu ${h.w>h.target?'cut':''}" style="width:${Math.min(h.w,h.target)/max*100}%"></i>${h.w>h.target?`<i class="ov" style="left:${h.target/max*100}%;width:${(h.w-h.target)/max*100}%"></i>`:''}</div>
       <div class="meta num">현재 ${pp(h.w,1)} · 목표 ${pp(h.target,0)}${h.w>h.target?` · <b>${pp(h.w-h.target,1)} 초과</b>`:''}</div></div>`).join('')+
     `<div class="legend" style="margin-top:12px"><span><b style="display:inline-block;background:var(--text-3);width:12px;height:6px;border-radius:3px"></b>현재 비중</span><span><b style="display:inline-block;background:var(--surface-2);box-shadow:inset 0 0 0 1px var(--line);width:12px;height:6px;border-radius:3px"></b>목표까지 남은 비중</span><span><b style="display:inline-block;background:var(--over);width:12px;height:6px;border-radius:3px"></b>목표 초과</span></div>`;
@@ -558,7 +597,7 @@ function heat(r){
 function drawTreemap(c=calc()){
   const el=document.getElementById('treemap'); if(!el||!el.offsetParent) return;
   const W=el.clientWidth,H=el.clientHeight; if(!W||!H) return;
-  const hs=[...c.held].sort((a,b)=>b.val-a.val), tot=hs.reduce((a,h)=>a+h.val,0);
+  const hs=[...c.held].filter(h=>h.val>0).sort((a,b)=>b.val-a.val), tot=hs.reduce((a,h)=>a+h.val,0); if(!tot){el.innerHTML='<p class="muted" style="padding:24px;text-align:center">보유 종목이 없어요</p>';return}
   const rects=squarify(hs.map(h=>({it:h,area:h.val/tot*W*H})),0,0,W,H,[]);
   el.innerHTML=rects.map(({it:h,x,y,w,h:hh})=>{
     const t=heat(h.evR), wide=w>=200;
@@ -598,7 +637,6 @@ document.addEventListener('click',e=>{
   if(t.hasAttribute('data-add')) openAdd();
   if(t.hasAttribute('data-cash')){cAmt.value=D.cash.toLocaleString();openSheet(cashSheet)}
   if(t.hasAttribute('data-close')) closeSheets();
-  if(t.hasAttribute('data-sync')) toast('시안에서는 엑셀 동기화가 아직 연결되지 않았어요');
 });
 document.addEventListener('change',e=>{if(e.target.id==='stockSel'){st.stock=e.target.value;render()}});
 scrim.onclick=closeSheets;
@@ -612,16 +650,19 @@ let type='buy', plTouched=false;
 const toN=v=>{const s=String(v).trim();const n=+s.replace(/[^\d]/g,'')||0;return s.startsWith('-')?-n:n};
 const fmtIn=i=>{const raw=i.value.trim(),n=toN(raw);i.value=n?(n<0?'-':'')+Math.abs(n).toLocaleString():(raw==='-'?'-':'')};
 [fQty,fAmt2,fAmt,cAmt,fPl].forEach(i=>i.addEventListener('input',()=>{fmtIn(i);if(i===fPl)plTouched=true;upd()}));
-fCode.onchange=()=>{plTouched=false;upd()}; fDate.onchange=upd;
+fCode.onchange=()=>{plTouched=false;fNewWrap.hidden=fCode.value!=='__new__';upd()}; fDate.onchange=upd;
 function openAdd(){
-  fCode.innerHTML=STOCKS.filter(s=>s.held).map(s=>`<option value="${s.n}">${s.n}</option>`).join('')+`<optgroup label="매도 완료 종목">${STOCKS.filter(s=>!s.held).map(s=>`<option value="${s.n}">${s.n}</option>`).join('')}</optgroup>`;
+  fCode.innerHTML=STOCKS.filter(s=>s.held).map(s=>`<option value="${s.n}">${s.n}</option>`).join('')+`<option value="__new__">＋ 새 종목 (처음 사는 종목)</option><optgroup label="매도 완료 종목">${STOCKS.filter(s=>!s.held).map(s=>`<option value="${s.n}">${s.n}</option>`).join('')}</optgroup>`;
+  etfList.innerHTML=(D.etfNames||[]).map(n=>`<option value="${n}">`).join('');
   if(st.detail) fCode.value=st.detail;
+  fNewWrap.hidden=fCode.value!=='__new__'; fNew.value='';
   fDate.value=new Date().toISOString().slice(0,10);
   [fQty,fAmt2,fAmt,fPl].forEach(i=>i.value='');plTouched=false;
   setType(type);openSheet(addSheet);
 }
 seg.onclick=e=>{const b=e.target.closest('button');if(b)setType(b.dataset.t)};
 function setType(t){type=t;plTouched=false;
+  const nw=fCode.querySelector('option[value=__new__]'); if(nw) nw.hidden=t!=='buy'; if(t!=='buy'&&fCode.value==='__new__'){fCode.selectedIndex=0;} fNewWrap.hidden=!(t==='buy'&&fCode.value==='__new__');
   seg.querySelectorAll('button').forEach(x=>x.classList.toggle('on',x.dataset.t===t));
   document.querySelectorAll('#addForm [data-for]').forEach(el=>el.style.display=el.dataset.for.split(' ').includes(t)?'':'none');
   fDateL.textContent=t==='div'?'지급일':t==='dep'?'입금일':'일자';
@@ -643,24 +684,84 @@ function upd(){
   if(type==='dep'){const A=toN(fAmt.value),k=calc();
     fPrev.innerHTML=row('입력 후 총 입금액',won(k.dep+A))+row('입력 후 최종 수익률',pct((k.acct)/(k.dep+A)-1))+`<div style="font-size:12.5px;color:var(--text-3)">입금한 돈이 잔여 금액에 들어왔다면 잔여 금액도 수정해 주세요.</div>`}
 }
-addForm.onsubmit=e=>{e.preventDefault();
+addForm.onsubmit=async e=>{e.preventDefault();
   const d=fDate.value; if(!d) return toast('날짜를 입력해주세요');
+  let x;
   if(type==='buy'||type==='sell'){const q=toN(fQty.value),a=toN(fAmt2.value);if(!q||!a)return toast('수량과 금액을 입력해주세요');
-    D.tx.push({row:1e9+D.tx.length,d,t:type,n:fCode.value,q,a,pl:type==='sell'?toN(fPl.value):0});}
+    const n=fCode.value==='__new__'?fNew.value.trim():fCode.value; if(!n) return toast('새 종목명을 입력해주세요');
+    x={d,t:type,n,q,a,pl:type==='sell'?toN(fPl.value):0};}
   else{const a=toN(fAmt.value);if(!a)return toast('금액을 입력해주세요');
-    if(type==='div'){const {q,c}=costAt(fCode.value,d);D.div.push({row:1e9+D.div.length,d,n:fCode.value,q,cost:c,y:c?a/c:null,a})}
-    else D.dep.push({row:1e9+D.dep.length,d,a});}
-  closeSheets();render();toast(`${TL[type]} 기록 완료 (시안이라 엑셀엔 아직 저장 안 돼요)`)};
-cSave.onclick=()=>{D.cash=toN(cAmt.value);closeSheets();render();toast('잔여 금액을 수정했어요')};
+    x=type==='div'?{d,t:'div',n:fCode.value,a}:{d,t:'dep',a};}
+  if(DEMO){
+    if(x.t==='buy'||x.t==='sell') D.tx.push({row:1e9+D.tx.length,...x});
+    else if(x.t==='div'){const {q,c}=costAt(x.n,d);D.div.push({row:1e9+D.div.length,d,n:x.n,q,cost:c,y:c?x.a/c:null,a:x.a})}
+    else D.dep.push({row:1e9+D.dep.length,d,a:x.a});
+    closeSheets();render();return toast(`${TL[type]} 기록 완료 (시안이라 엑셀엔 저장 안 돼요)`);
+  }
+  await saveToExcel(async()=>{
+    if(x.t==='buy'||x.t==='sell') await XL.addTrade(x,D);
+    else if(x.t==='div') await XL.addDividend(x);
+    else await XL.addDeposit(x);
+  },`${TL[type]} 기록을 엑셀에 저장했어요`);
+};
+cSave.onclick=async()=>{const v=toN(cAmt.value);
+  if(DEMO){D.cash=v;closeSheets();render();return toast('잔여 금액을 수정했어요')}
+  await saveToExcel(()=>XL.setCash(v),'잔여 금액을 엑셀에 저장했어요');
+};
+async function saveToExcel(fn,okMsg){
+  const btns=document.querySelectorAll('#addSheet .btn,#cashSheet .btn'); btns.forEach(b=>b.disabled=true);
+  busy.hidden=false; busyMsg.textContent='엑셀에 저장 중…';
+  try{ await fn(); closeSheets(); busyMsg.textContent='엑셀에서 다시 불러오는 중…'; await refresh(true); toast(okMsg); }
+  catch(err){ console.error(err); toast('저장하지 못했어요: '+err.message); }
+  finally{ busy.hidden=true; btns.forEach(b=>b.disabled=false); }
+}
 document.addEventListener('keydown',e=>{if(e.key==='Escape')closeSheets()});
 let wasWide=isWide();addEventListener('resize',()=>{if(wasWide!==isWide()){wasWide=isWide();holdListCard.style.display='';detailPane.style.display=wasWide?'block':(st.detail?'block':'none');if(!wasWide&&st.detail)holdListCard.style.display='none';render()}});
-render();
-/* KRX 시세(prices.json, GitHub Actions가 평일 장 마감 후 갱신) 반영 */
-fetch('prices.json',{cache:'no-store'}).then(r=>r.ok?r.json():null).then(px=>{
-  if(!px||!px.items) return; let hit=0;
-  STOCKS.forEach(s=>{const it=s.code&&px.items[s.code]; if(it&&it.c){s.price=it.c;hit++}});
-  if(hit){D.asof=px.asof;D.priceSource=px.source;render();asof.textContent=`${px.asof.replace(/-/g,'.')} 종가 기준 · ${px.source==='KRX'?'KRX':'네이버'} 시세`}
-}).catch(()=>{});
+/* ===== 시작: 시안(미리보기)이면 내장 데이터, 실제 앱이면 엑셀에서 불러오기 ===== */
+let PX=null;
+const pxReady=fetch('prices.json',{cache:'no-store'}).then(r=>r.ok?r.json():null).then(j=>PX=j).catch(()=>null);
+function applyPrices(){
+  if(!PX||!PX.items) return;
+  let hit=0; STOCKS.forEach(s=>{const it=s.code&&PX.items[s.code]; if(it&&it.c){s.price=it.c;hit++}});
+  if(hit){D.asof=PX.asof;D.priceSource=PX.source}
+}
+function paint(){
+  buildStocks(); applyPrices(); render();
+  asof.textContent=PX&&PX.items?`${PX.asof.replace(/-/g,'.')} 종가 · ${PX.source==='KRX'?'KRX':'네이버'} 시세`:`${D.asof.replace(/-/g,'.')} 기준`;
+  drawTreemap();
+}
+async function refresh(quiet){
+  syncBtn.classList.add('spinning');
+  try{
+    D=await XL.load(); await pxReady; paint();
+    if(await XL.ensureDepositLink()){ D=await XL.load(); paint(); toast('엑셀 입금 금액(U18)을 입금내역 합계에 연결했어요'); }
+    XL.writePrices(PX,D).then(n=>{ if(n) toast(`엑셀 ETF시세 시트에 ${n}개 종목 시세를 반영했어요`) }).catch(e=>console.warn('시세 반영 실패',e));
+    if(!quiet) toast('엑셀에서 최신 내용을 불러왔어요');
+  }catch(err){ console.error(err); toast('엑셀을 불러오지 못했어요: '+err.message); }
+  finally{ syncBtn.classList.remove('spinning'); }
+}
+async function start(){
+  if(DEMO){ await pxReady; return paint(); }
+  modeBadge.remove();
+  const c=XL.cached(); if(c){ D=c; await pxReady; paint(); }
+  let signed=false;
+  try{ signed=await XL.init(); }catch(err){ gate.hidden=false; gateMsg.textContent=err.message; gateBtn.hidden=true; return; }
+  if(!signed){ gate.hidden=false; return; }
+  gate.hidden=true; refresh(true);
+}
+gateBtn.onclick=()=>XL.login();
+document.addEventListener('click',e=>{
+  const t=e.target.closest('button'); if(!t) return;
+  if(t.hasAttribute('data-sync')){ if(DEMO) toast('시안에서는 엑셀 동기화가 동작하지 않아요'); else refresh(); }
+  if(t.hasAttribute('data-settings')){
+    if(DEMO) return toast('시안에서는 설정이 없어요');
+    sPath.value=XL.path(); sInfo.innerHTML=`<div><span>로그인 계정</span><b>${XL.user()||'-'}</b></div><div><span>마지막 불러오기</span><b>${D.loadedAt?new Date(D.loadedAt).toLocaleString('ko-KR'):'-'}</b></div>`;
+    openSheet(setSheet);
+  }
+});
+sSave.onclick=()=>{XL.setPath(sPath.value.trim());closeSheets();refresh()};
+sLogout.onclick=()=>XL.logout();
+start();
 </script>
 </body>
 </html>
