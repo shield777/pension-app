@@ -106,7 +106,9 @@ button.stat:active{filter:brightness(.97)}
 .tile .tv{display:block;white-space:nowrap;font-size:16px;font-weight:750;letter-spacing:-.02em;line-height:1.25}
 .tile .tr{display:block;font-size:12.5px;font-weight:650;opacity:.92;margin-top:1px}
 .tile.sm{padding:6px 7px}.tile.sm .tn{font-size:12px}.tile.sm .tv{font-size:13px}.tile.sm .tr{font-size:11.5px}
-.tile.xs{justify-content:center;align-items:center;padding:2px;text-align:center}.tile.xs .tn{font-size:11px}.tile.xs .tr{font-size:11px}
+.tile.xs{padding:5px 6px}.tile.xs .tn{font-size:11px;-webkit-line-clamp:1}.tile.xs .tv{font-size:11px;letter-spacing:-.03em}.tile.xs .tr{font-size:10.5px}
+.tile.row{flex-direction:row;align-items:center;justify-content:flex-start;gap:8px;padding:2px 8px}.tile.row .tn{font-size:11.5px;-webkit-line-clamp:1}.tile.row .tv{font-size:11.5px}.tile.row .tr{font-size:11px;margin:0 0 0 auto}
+.tile.xxs{justify-content:center;align-items:center;padding:2px;text-align:center}.tile.xxs .tn{font-size:10.5px;-webkit-line-clamp:1}.tile.xxs .tr{font-size:10px}.tile.xxs .tv{font-size:10.5px}
 .scale{display:flex;align-items:center;gap:8px;margin-top:12px;font-size:12px;color:var(--text-3);flex-wrap:wrap}
 .scale i{display:block;width:96px;height:6px;border-radius:9px;background:linear-gradient(90deg,var(--down),var(--surface-2),var(--up))}
 .scale em{font-style:normal;margin-left:auto}
@@ -559,11 +561,16 @@ function drawTreemap(c=calc()){
   const hs=[...c.held].sort((a,b)=>b.val-a.val), tot=hs.reduce((a,h)=>a+h.val,0);
   const rects=squarify(hs.map(h=>({it:h,area:h.val/tot*W*H})),0,0,W,H,[]);
   el.innerHTML=rects.map(({it:h,x,y,w,h:hh})=>{
-    const t=heat(h.evR), size=w>=150&&hh>=124?'':w>=98&&hh>=74?'sm':'xs', wide=w>=200;
-    const name=size==='xs'?h.ab:h.n;
+    const t=heat(h.evR), wide=w>=200;
+    // 칸 모양별 표시: 큰 칸(full) / 중간(sm) / 작은 칸(xs: 작은 글씨로 금액까지) / 납작한 칸(row: 한 줄) / 아주 작은 칸(xxs)
+    const size=w>=150&&hh>=124?'':w>=98&&hh>=74?'sm':w>=56&&hh>=58?'xs':w>=150&&hh>=24?'row':'xxs';
+    const name=size==='xxs'||(size==='xs'&&w<100)?h.ab:size==='xs'||size==='row'?core(h.n):h.n;
+    const amt=`<span class="tv num">${(size==='xs'&&w<100)||size==='xxs'?man(h.val):won(h.val)}</span>`, rt=`<span class="tr num">${!size&&wide?`${sw(h.ev)} (${pct(h.evR)})`:pct(h.evR,size?1:2)}</span>`;
+    const body=size==='xxs'?`<span class="tn">${name}</span>${hh>=46?amt:''}${rt}`
+      :size==='row'?`<span class="tn">${name}</span>${amt}${rt}`
+      :`<span><span class="tn">${name}</span>${size?'':`<span class="tq num">${h.qty.toLocaleString()}주</span>`}</span><span>${amt}${rt}</span>`;
     return `<button class="tile ${size} ${t.on?'on':''}" role="listitem" data-stock="${h.n}" aria-label="${h.n} ${h.qty}주 평가금액 ${won(h.val)} 수익률 ${pct(h.evR)}"
-      style="left:${x/W*100}%;top:${y/H*100}%;width:${w/W*100}%;height:${hh/H*100}%;background:${t.bg}">
-      <span><span class="tn">${name}</span>${size?'':`<span class="tq num">${h.qty.toLocaleString()}주</span>`}</span>${size==='xs'?`<span class="tr num">${pct(h.evR,1)}</span>`:`<span><span class="tv num">${won(h.val)}</span><span class="tr num">${!size&&wide?`${sw(h.ev)} (${pct(h.evR)})`:pct(h.evR)}</span></span>`}</button>`}).join('');
+      style="left:${x/W*100}%;top:${y/H*100}%;width:${w/W*100}%;height:${hh/H*100}%;background:${t.bg}">${body}</button>`}).join('');
 }
 let tmT;addEventListener('resize',()=>{clearTimeout(tmT);tmT=setTimeout(()=>drawTreemap(),120)});
 
