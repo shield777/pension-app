@@ -37,8 +37,9 @@ async function fromNaver() {
   const res = await fetch('https://finance.naver.com/api/sise/etfItemList.nhn?etfType=0&targetColumn=market_sum&sortOrder=desc', { headers: { 'User-Agent': UA, 'Referer': 'https://finance.naver.com/sise/etfList.naver' } });
   if (!res.ok) throw new Error('Naver HTTP ' + res.status);
   const buf = await res.arrayBuffer();
+  // 네이버는 EUC-KR로 응답하는 경우가 있어, 깨진 글자(�)가 보이면 EUC-KR로 다시 읽음
   let text = new TextDecoder('utf-8').decode(buf);
-  if (!text.trim().startsWith('{')) text = new TextDecoder('euc-kr').decode(buf);
+  if (text.includes('\uFFFD')) text = new TextDecoder('euc-kr').decode(buf);
   const list = JSON.parse(text).result.etfItemList;
   const items = {};
   for (const r of list) items[r.itemcode] = { n: r.itemname, c: num(r.nowVal), mc: num(r.marketSum) * 1e8 };
