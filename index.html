@@ -15,7 +15,7 @@
   --text:#09090B; --text-2:#52525B; --text-3:#71717A;
   --brand:#18181B; --brand-soft:#F4F4F5; --on-brand:#FFFFFF;
   --up:#D92D20; --up-soft:#FEF3F2; --down:#1D5FD6; --down-soft:#EFF4FF;
-  --div:var(--text); --div-soft:var(--surface-2);
+  --div:var(--text); --div-soft:var(--surface-2); --over:#E8590C;
   --shadow:none; --radius:18px; --radius-sm:12px;
 }
 @media (prefers-color-scheme: dark){
@@ -24,7 +24,7 @@
     --text:#FAFAFA; --text-2:#A1A1AA; --text-3:#8B8B94;
     --brand:#FAFAFA; --brand-soft:#1F1F23; --on-brand:#09090B;
     --up:#F0544F; --up-soft:#2A1414; --down:#5B8DEF; --down-soft:#131C2E;
-    --div:var(--text); --div-soft:var(--surface-2);
+    --div:var(--text); --div-soft:var(--surface-2); --over:#FF8A3D;
   }
 }
 :root[data-theme="dark"]{
@@ -32,7 +32,7 @@
     --text:#FAFAFA; --text-2:#A1A1AA; --text-3:#8B8B94;
     --brand:#FAFAFA; --brand-soft:#1F1F23; --on-brand:#09090B;
     --up:#F0544F; --up-soft:#2A1414; --down:#5B8DEF; --down-soft:#131C2E;
-    --div:var(--text); --div-soft:var(--surface-2);
+    --div:var(--text); --div-soft:var(--surface-2); --over:#FF8A3D;
 }
 *{box-sizing:border-box;margin:0;padding:0}
 html,body{background:var(--bg)}
@@ -87,12 +87,17 @@ button.stat:active{filter:brightness(.97)}
 
 .rb{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 12px;padding:10px 0;align-items:center}
 .rb+.rb{border-top:1px solid var(--line)}
-.rb .nm{font-size:14.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rb .nm{font-size:14.5px;font-weight:600;word-break:keep-all}
 .rb .adj{font-size:14px;font-weight:650;text-align:right;color:var(--text)}
 .rb .adj em{font-style:normal;font-size:12px;font-weight:600;color:var(--text-3);margin-right:4px}
 .rb .track{grid-column:1/-1;position:relative;height:6px;background:var(--surface-2);border-radius:99px;margin-top:6px}
-.rb .track i{position:absolute;left:0;top:0;bottom:0;border-radius:99px}
-.rb .track u{position:absolute;top:-3px;bottom:-3px;width:2px;background:var(--text);border-radius:2px}
+.rb .track{background:none}
+.rb .track i{position:absolute;top:0;bottom:0;border-radius:99px}
+.rb .track .tg{left:0;background:var(--surface-2);box-shadow:inset 0 0 0 1px var(--line)}
+.rb .track .cu{left:0;background:var(--text-3)}
+.rb .track .ov{background:var(--over);border-top-left-radius:0;border-bottom-left-radius:0}
+.rb .track .cu.cut{border-top-right-radius:0;border-bottom-right-radius:0}
+.rb .meta b{color:var(--over);font-weight:600}
 .rb .meta{grid-column:1/-1;font-size:12px;color:var(--text-3)}
 
 .hold{display:flex;align-items:center;gap:12px;width:100%;padding:12px 4px;border-radius:14px;text-align:left;min-height:64px}
@@ -102,7 +107,7 @@ button.stat:active{filter:brightness(.97)}
 .logo{width:40px;height:40px;border-radius:50%;display:grid;place-items:center;font-size:11.5px;font-weight:700;color:var(--text-2);background:var(--surface-2);flex:none;letter-spacing:-.03em;position:relative}
 
 .hold .nm{flex:1;min-width:0}
-.hold .nm b{display:block;font-size:15.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hold .nm b{display:block;font-size:15.5px;font-weight:600;line-height:1.35;word-break:keep-all;overflow-wrap:anywhere}
 .hold .nm small{font-size:13px;color:var(--text-3)}
 .hold .rt{text-align:right;flex:none}
 .hold .rt b{display:block;font-size:15.5px;font-weight:600}
@@ -120,7 +125,7 @@ button.stat:active{filter:brightness(.97)}
 
 
 .row .mid{flex:1;min-width:0}
-.row .mid b{display:block;font-size:15px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.row .mid b{display:block;font-size:15px;font-weight:600;line-height:1.35;word-break:keep-all}
 .row .mid small{font-size:12.5px;color:var(--text-3)}
 .row .amt{text-align:right;font-weight:600;font-size:15px;flex:none}
 .row .amt small{display:block;font-size:12.5px;font-weight:600}
@@ -173,7 +178,7 @@ select.chip{-webkit-appearance:none;appearance:none;padding-right:30px;backgroun
 .dhead b{font-size:19px;font-weight:700;display:block;line-height:1.3}
 .kv{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .dl{display:grid;grid-template-columns:auto 1fr;gap:10px 16px;font-size:14px}
-.dl dt{color:var(--text-2)} .dl dd{text-align:right;font-weight:600}
+.dl dt{color:var(--text-2)} .dl dt small{display:block;font-size:12px;color:var(--text-3)} .dl dd{text-align:right;font-weight:600;white-space:nowrap}
 .subtabs{display:flex;gap:4px;background:var(--surface-2);border-radius:12px;padding:4px;margin-bottom:6px}
 .subtabs button{flex:1;height:36px;border-radius:9px;font-weight:600;font-size:14px;color:var(--text-2)}
 .subtabs button.on{background:var(--surface);color:var(--text);box-shadow:0 1px 3px rgba(0,0,0,.1)}
@@ -195,6 +200,8 @@ select.chip{-webkit-appearance:none;appearance:none;padding-right:30px;backgroun
   .side .cta{margin-top:auto}
   .home-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
   .home-grid .hero{grid-column:1/-1}
+  .home-grid .tall{grid-row:span 2}
+  .home-grid{align-items:start}
   .split{grid-template-columns:repeat(4,1fr)}
   .sheet{left:50%;right:auto;top:50%;bottom:auto;width:460px;border-radius:24px;transform:translate(-50%,-46%);opacity:0;pointer-events:none;transition:transform .25s cubic-bezier(.2,.8,.2,1),opacity .2s}
   .sheet.on{transform:translate(-50%,-50%);opacity:1;pointer-events:auto}
@@ -270,10 +277,6 @@ select.chip{-webkit-appearance:none;appearance:none;padding-right:30px;backgroun
           <h2>보유종목 <button class="link" data-go="hold">전체 <svg class="i s"><use href="#i-chev"/></svg></button></h2>
           <div class="bar" id="compBar"></div><div class="legend" id="compLegend" style="margin-bottom:6px"></div>
           <div id="homeHold"></div>
-        </div>
-        <div class="card">
-          <h2>최근 기록 <button class="link" data-go="hist">전체 <svg class="i s"><use href="#i-chev"/></svg></button></h2>
-          <div id="homeRecent"></div>
         </div>
       </div>
     </section>
@@ -407,28 +410,30 @@ function xirr(cf){ // 엑셀 XIRR과 같은 방식
 const logo=s=>`<span class="logo" style="--dot:${s.held?(s.ev>0?'var(--up)':s.ev<0?'var(--down)':'var(--line)'):'var(--line)'}">${s.ab}</span>`;
 function holdRow(h,sel){
   if(!h.held) return `<button class="hold ${sel?'sel':''}" data-stock="${h.n}">${logo(h)}
-    <span class="nm"><b>${core(h.n)}</b><small>${brand(h.n)} · 전량 매도</small></span>
+    <span class="nm"><b>${h.n}</b><small>전량 매도</small></span>
     <span class="rt"><b class="num ${sgn(h.total)}">${sw(h.total)}</b><small class="muted">매도손익+배당</small></span></button>`;
   return `<button class="hold ${sel?'sel':''}" data-stock="${h.n}">${logo(h)}
-    <span class="nm"><b>${core(h.n)}</b><small class="num">${brand(h.n)} · ${h.qty.toLocaleString()}주<span class="wide"> · ${pp(h.w,1)}</span></small></span>
+    <span class="nm"><b>${h.n}</b><small class="num">${h.qty.toLocaleString()}주 · 비중 ${pp(h.w,1)}</small></span>
     <span class="rt"><b class="num">${won(h.val)}</b><small class="num ${sgn(h.ev)}">${pct(h.evR)}</small></span></button>`;
 }
 const TL={buy:'매수',sell:'매도',div:'배당',dep:'입금'};
 function txRow(x,withName=true){
-  const name=x.t==='dep'?'퇴직연금 입금':withName?core(x.n):TL[x.t];
-  let sub=x.d.replace(/-/g,'.'), extra='';
-  if(x.t==='buy'||x.t==='sell'){sub+=` · ${x.q.toLocaleString()}주 × ${Math.round(x.a/x.q).toLocaleString()}`;
+  const date=x.d.replace(/-/g,'.');
+  const name=x.t==='dep'?'퇴직연금 입금':withName?x.n:date;
+  let sub=withName||x.t==='dep'?date:'', extra='';
+  const sep=()=>sub?' · ':'';
+  if(x.t==='buy'||x.t==='sell'){sub+=`${sep()}${x.q.toLocaleString()}주 × ${Math.round(x.a/x.q).toLocaleString()}원`;
     if(x.t==='sell') extra=`<small class="${sgn(x.pl)}">손익 ${sw(x.pl)}</small>`}
-  else if(x.t==='div'){sub+=x.q?` · ${x.q.toLocaleString()}주`:'';extra=x.y!=null?`<small class="dv">배당률 ${pp(x.y)}</small>`:''}
+  else if(x.t==='div'){sub+=x.q?`${sep()}${x.q.toLocaleString()}주 보유`:'';extra=x.y!=null?`<small class="dv">배당률 ${pp(x.y)}</small>`:''}
   return `<div class="row"><span class="tag ${x.t}">${TL[x.t]}</span>
     <div class="mid"><b>${name}</b><small class="num">${sub}</small></div>
     <div class="amt num">${won(x.a)}${extra}</div></div>`;
 }
 const allEvents=()=>[...D.tx,...D.div.map(x=>({...x,t:'div'})),...D.dep.map(x=>({...x,t:'dep'}))];
 const byDate=a=>[...a].sort((x,y)=>y.d.localeCompare(x.d)||(y.row||0)-(x.row||0));
-function groupBy(a,fmt){
+function groupBy(a,fmt,withName=true){
   let out='',cur='';
-  a.forEach(x=>{const k=fmt(x.d); if(k!==cur){out+=`<div class="month">${k}</div>`;cur=k} out+=txRow(x)});
+  a.forEach(x=>{const k=fmt(x.d); if(k!==cur){out+=`<div class="month">${k}</div>`;cur=k} out+=txRow(x,withName)});
   return out||'<p class="muted" style="padding:24px 0;text-align:center">기록이 없어요</p>';
 }
 const ym=d=>d.slice(0,4)+'년 '+(+d.slice(5,7))+'월', yy=d=>d.slice(0,4)+'년';
@@ -445,21 +450,20 @@ function render(){
   divBox.innerHTML=`<div class="stat"><div class="k">올해 받은 배당</div><div class="v num dv">${won(c.thisYear)}</div></div>
     <div class="stat"><div class="k">연 배당률(원금 기준)</div><div class="v num">${c.buy?pp(c.ttmHeld/c.buy):'-'}</div></div>`;
   const max=Math.max(...c.held.map(x=>Math.max(x.w,x.target)),0.01)*1.12;
-  rebal.innerHTML=[...c.held].sort((a,b)=>Math.abs(b.adj)-Math.abs(a.adj)).map(h=>`<div class="rb"><div class="nm">${core(h.n)}</div>
+  rebal.innerHTML=[...c.held].sort((a,b)=>Math.abs(b.adj)-Math.abs(a.adj)).map(h=>`<div class="rb"><div class="nm">${h.n}</div>
       <div class="adj num"><em>${h.adj>0?'매수':'매도'}</em>${man(Math.abs(h.adj))}</div>
-      <div class="track"><i style="width:${h.w/max*100}%;background:var(--text-3)"></i><u style="left:${h.target/max*100}%"></u></div>
-      <div class="meta num">현재 ${pp(h.w,1)} · 목표 ${pp(h.target,0)}</div></div>`).join('')+
-    `<div class="legend" style="margin-top:12px"><span><b style="display:inline-block;background:var(--text);width:2px;height:12px"></b>목표 비중</span><span><b style="display:inline-block;background:var(--text-3);width:12px;height:6px;border-radius:3px"></b>현재 비중</span></div>`;
+      <div class="track"><i class="tg" style="width:${h.target/max*100}%"></i><i class="cu ${h.w>h.target?'cut':''}" style="width:${Math.min(h.w,h.target)/max*100}%"></i>${h.w>h.target?`<i class="ov" style="left:${h.target/max*100}%;width:${(h.w-h.target)/max*100}%"></i>`:''}</div>
+      <div class="meta num">현재 ${pp(h.w,1)} · 목표 ${pp(h.target,0)}${h.w>h.target?` · <b>${pp(h.w-h.target,1)} 초과</b>`:''}</div></div>`).join('')+
+    `<div class="legend" style="margin-top:12px"><span><b style="display:inline-block;background:var(--text-3);width:12px;height:6px;border-radius:3px"></b>현재 비중</span><span><b style="display:inline-block;background:var(--surface-2);box-shadow:inset 0 0 0 1px var(--line);width:12px;height:6px;border-radius:3px"></b>목표까지 남은 비중</span><span><b style="display:inline-block;background:var(--over);width:12px;height:6px;border-radius:3px"></b>목표 초과</span></div>`;
   compBar.innerHTML=[...c.held].sort((a,b)=>b.val-a.val).map(h=>`<i style="width:${h.w*100}%;background:${h.color}" title="${h.n}"></i>`).join('')+`<i style="width:${D.cash/c.acct*100}%;background:var(--line)" title="잔여 금액"></i>`;
-  compLegend.innerHTML=[...c.held].sort((a,b)=>b.val-a.val).slice(0,4).map(h=>`<span><b style="display:inline-block;width:8px;height:8px;border-radius:2px;background:${h.color}"></b>${core(h.n)} ${pp(h.w,1)}</span>`).join('')+`<span>외 ${c.held.length-4}종목</span>`;
+  compLegend.innerHTML=[...c.held].sort((a,b)=>b.val-a.val).slice(0,4).map(h=>`<span><b style="display:inline-block;width:8px;height:8px;border-radius:2px;background:${h.color}"></b>${h.n} ${pp(h.w,1)}</span>`).join('')+`<span>외 ${c.held.length-4}종목</span>`;
   homeHold.innerHTML=[...c.held].sort((a,b)=>b.val-a.val).slice(0,4).map(h=>holdRow(h)).join('');
-  homeRecent.innerHTML=byDate(allEvents()).slice(0,6).map(x=>txRow(x)).join('');
   const hs=[...c.held].sort((a,b)=>b.val-a.val);
   const selN=st.detail||(innerWidth>=1100&&hs[0]?hs[0].n:'');
   holdList.innerHTML=hs.map(h=>holdRow(h,h.n===selN)).join('')+(c.sold.length?`<div class="sec">매도 완료 종목</div>`+c.sold.map(h=>holdRow(h,h.n===selN)).join(''):'');
   if(selN) renderDetail(selN,c);
   histChips.innerHTML=[['all','전체'],['buy','매수'],['sell','매도'],['div','배당']].map(([k,l])=>`<button class="chip ${st.f===k?'on':''}" data-f="${k}">${l}</button>`).join('')+
-    `<select class="chip" id="stockSel" aria-label="종목 선택"><option value="">모든 종목</option>${STOCKS.map(s=>`<option value="${s.n}" ${st.stock===s.n?'selected':''}>${core(s.n)}</option>`).join('')}</select>`;
+    `<select class="chip" id="stockSel" aria-label="종목 선택"><option value="">모든 종목</option>${STOCKS.map(s=>`<option value="${s.n}" ${st.stock===s.n?'selected':''}>${s.n}</option>`).join('')}</select>`;
   const ev=byDate(allEvents().filter(x=>x.t!=='dep'&&(st.f==='all'||x.t===st.f)&&(!st.stock||x.n===st.stock)));
   const sumBy=t=>ev.filter(x=>x.t===t).reduce((a,x)=>a+x.a,0);
   const right={all:`배당 합계 <b class="num">${won(sumBy('div'))}</b>`,div:`배당 합계 <b class="num">${won(sumBy('div'))}</b>`,buy:`매수 합계 <b class="num">${won(sumBy('buy'))}</b>`,sell:`손익 합계 <b class="num">${sw(ev.reduce((a,x)=>a+(x.pl||0),0))}</b>`}[st.f];
@@ -492,8 +496,8 @@ function renderDetail(name,c=calc()){
       ${h.held?`<div class="stat"><div class="k">종목별 총수익</div><div class="v num ${sgn(h.total)}">${man(h.total)} <small>${pct(h.totalR,1)}</small></div></div>`:''}
     </div>
     ${h.held?`<dl class="dl" style="margin-top:16px">
-      <dt>연 배당률 <small class="muted">(최근 12개월 ÷ 매수총액)</small></dt><dd class="num dv">${pp(h.ttmY)}</dd>
-      <dt>시가 배당률 <small class="muted">(최근 12개월 ÷ 평가금액)</small></dt><dd class="num">${pp(h.mktY)}</dd>
+      <dt>연 배당률<small>(최근 12개월 ÷ 매수총액)</small></dt><dd class="num dv">${pp(h.ttmY)}</dd>
+      <dt>시가 배당률<small>(최근 12개월 ÷ 평가금액)</small></dt><dd class="num">${pp(h.mktY)}</dd>
       <dt>현재 / 목표 비중</dt><dd class="num">${pp(h.w,1)} / ${pp(h.target,0)}</dd>
       <dt>조정 금액</dt><dd class="num">${h.adj>0?'매수':'매도'} ${won(Math.abs(h.adj))}</dd>
       <dt>보유 기간 · 최근 매수</dt><dd class="num">${(daysBetween(h.first,today)/365).toFixed(1)}년 · ${daysBetween(h.last,today)}일 전</dd>
@@ -501,7 +505,7 @@ function renderDetail(name,c=calc()){
   </div>
   <div class="card" style="margin-top:12px">
     <div class="subtabs"><button class="${st.dtab==='tx'?'on':''}" data-dtab="tx">매매 ${tx.length}건</button><button class="${st.dtab==='div'?'on':''}" data-dtab="div">배당 ${dv.length}건</button></div>
-    ${st.dtab==='tx'?groupBy(tx,yy):groupBy(dv,yy)}
+    ${st.dtab==='tx'?groupBy(tx,yy,false):groupBy(dv,yy,false)}
   </div>`;
 }
 
