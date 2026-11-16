@@ -2,5 +2,8 @@
 *.xlsx
 data.js
 real.json
+# 화면 캡처는 제외하되 앱 아이콘은 올림
 *.png
+!icons/*.png
+!apple-touch-icon.png
 __pycache__/
