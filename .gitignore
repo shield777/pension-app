@@ -3,3 +3,4 @@
 data.js
 real.json
 *.png
+__pycache__/
