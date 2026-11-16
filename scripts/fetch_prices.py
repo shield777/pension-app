@@ -1,7 +1,7 @@
 """ETF 전종목 종가를 받아 prices.json 으로 저장.
 1순위: pykrx (KRX 정보데이터시스템, GitHub Secrets 의 KRX_ID/KRX_PW 로 로그인)
 2순위: 네이버 금융 ETF 전종목 (KRX 실패 시)
-전종목을 통째로 저장하므로 어떤 종목을 보유했는지는 드러나지 않음."""
+실행: GitHub Actions (평일 장 마감 후). 전종목을 통째로 저장하므로 어떤 종목을 보유했는지는 드러나지 않음."""
 import json, os, sys, datetime as dt
 import requests
 

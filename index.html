@@ -85,6 +85,30 @@ button.stat:active{filter:brightness(.97)}
 .legend{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:12.5px;color:var(--text-2)}
 .legend span{display:inline-flex;align-items:center;gap:6px}
 
+
+/* home: 수익/배당 행 목록 */
+.rows{display:grid}
+.rows>div{display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding:11px 0;border-top:1px solid var(--line)}
+.rows>div:first-child{border-top:0;padding-top:2px}
+.rows dt{font-size:14px;color:var(--text-2);white-space:nowrap}
+.rows dd{font-size:16px;font-weight:650;white-space:nowrap;text-align:right}
+.rows .tot dt{color:var(--text);font-weight:600}
+.sumgrid{display:grid;gap:22px}
+/* treemap */
+.a-map{display:flex;flex-direction:column}
+@media (max-width:767px){.a-hero{order:0}.a-map{order:1}.a-sum{order:2}.a-div{order:3}.a-reb{order:4}}
+.tm{position:relative;height:320px;border-radius:12px;overflow:hidden;flex:1 1 auto;min-height:260px}
+.tile{position:absolute;border:2px solid var(--surface);border-radius:10px;padding:8px 10px;display:flex;flex-direction:column;justify-content:space-between;overflow:hidden;text-align:left;color:var(--text);transition:filter .15s}
+.tile:hover{filter:brightness(1.06)} .tile:active{filter:brightness(.95)}
+.tile.on{color:#fff}
+.tile .tn{font-size:13px;font-weight:650;line-height:1.3;word-break:keep-all;overflow-wrap:anywhere}
+.tile .tp{font-size:17px;font-weight:750;letter-spacing:-.02em;line-height:1.2}
+.tile .tw{font-size:12px;opacity:.85;font-weight:500}
+.tile.sm{padding:6px 7px}.tile.sm .tn{font-size:12px}.tile.sm .tp{font-size:13px}
+.tile.xs{justify-content:center;align-items:center;padding:2px}.tile.xs .tn{font-size:11px;text-align:center}
+.scale{display:flex;align-items:center;gap:8px;margin-top:12px;font-size:12px;color:var(--text-3);flex-wrap:wrap}
+.scale i{display:block;width:96px;height:6px;border-radius:9px;background:linear-gradient(90deg,var(--down),var(--surface-2),var(--up))}
+.scale em{font-style:normal;margin-left:auto}
 .rb{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 12px;padding:10px 0;align-items:center}
 .rb+.rb{border-top:1px solid var(--line)}
 .rb .nm{font-size:14.5px;font-weight:600;word-break:keep-all}
@@ -200,8 +224,9 @@ select.chip{-webkit-appearance:none;appearance:none;padding-right:30px;backgroun
   .side .cta{margin-top:auto}
   .home-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
   .home-grid .hero{grid-column:1/-1}
-  .home-grid .tall{grid-row:span 2}
-  .home-grid{align-items:start}
+  #v-home .home-grid{grid-template-areas:"hero hero" "sum div" "map map" "reb reb"}
+  #v-home .home-grid>.a-hero{grid-area:hero} #v-home .home-grid>.a-sum{grid-area:sum} #v-home .home-grid>.a-div{grid-area:div} #v-home .home-grid>.a-map{grid-area:map} #v-home .home-grid>.a-reb{grid-area:reb}
+  .tm{height:360px}
   .split{grid-template-columns:repeat(4,1fr)}
   .sheet{left:50%;right:auto;top:50%;bottom:auto;width:460px;border-radius:24px;transform:translate(-50%,-46%);opacity:0;pointer-events:none;transition:transform .25s cubic-bezier(.2,.8,.2,1),opacity .2s}
   .sheet.on{transform:translate(-50%,-50%);opacity:1;pointer-events:auto}
@@ -210,9 +235,10 @@ select.chip{-webkit-appearance:none;appearance:none;padding-right:30px;backgroun
 }
 @media (min-width:1100px){
   .side{width:256px}
-  .home-grid{grid-template-columns:repeat(3,minmax(0,1fr))}
-  .home-grid .hero{grid-column:span 2}
-  .home-grid .tall{grid-row:span 2}
+  #v-home .home-grid{grid-template-columns:repeat(3,minmax(0,1fr));grid-template-areas:"hero hero sum" "map map div" "map map reb"}
+  #v-home .a-hero{display:flex;flex-direction:column} #v-home .a-hero .split{margin-top:auto}
+  #v-home .a-reb{align-self:start}
+  .tm{height:auto}
   .hold-layout{display:grid;grid-template-columns:minmax(340px,420px) minmax(0,1fr);gap:16px;align-items:start}
   .hold-layout #detailPane{display:block!important;position:sticky;top:24px}
   .hold-layout .back{display:none}
@@ -252,7 +278,7 @@ select.chip{-webkit-appearance:none;appearance:none;padding-right:30px;backgroun
         <button class="icon-btn" aria-label="엑셀과 동기화" data-sync><svg class="i"><use href="#i-sync"/></svg></button>
       </div>
       <div class="grid home-grid">
-        <div class="card hero">
+        <div class="card hero a-hero">
           <div class="label">계좌 평가금액</div>
           <div class="big num" id="hTotal"></div>
           <div class="chg num" id="hChg"></div>
@@ -263,20 +289,22 @@ select.chip{-webkit-appearance:none;appearance:none;padding-right:30px;backgroun
             <div class="stat"><div class="k">평가 금액</div><div class="v num" id="hVal"></div></div>
           </div>
         </div>
-        <div class="card">
+        <div class="card a-sum">
           <h2>수익 구성 <small>매도 종목 포함</small></h2>
-          <div class="ret" id="retBox"></div>
-          <h2 style="margin-top:20px">배당 <small id="divSub"></small></h2>
-          <div class="kv" id="divBox"></div>
+          <dl class="rows" id="retBox"></dl>
         </div>
-        <div class="card tall">
+        <div class="card a-div">
+          <h2>배당</h2>
+          <dl class="rows" id="divBox"></dl>
+        </div>
+        <div class="card a-map">
+          <h2>보유 비중 <button class="link" data-go="hold">전체 <svg class="i s"><use href="#i-chev"/></svg></button></h2>
+          <div class="tm" id="treemap" role="list" aria-label="보유종목 비중 지도"></div>
+          <div class="scale"><span>-30%</span><i></i><span>+30%</span><em>칸 크기 = 비중 · 색 = 평가수익률</em></div>
+        </div>
+        <div class="card a-reb">
           <h2>비중 관리 <small>목표 대비 조정금액</small></h2>
           <div id="rebal"></div>
-        </div>
-        <div class="card">
-          <h2>보유종목 <button class="link" data-go="hold">전체 <svg class="i s"><use href="#i-chev"/></svg></button></h2>
-          <div class="bar" id="compBar"></div><div class="legend" id="compLegend" style="margin-bottom:6px"></div>
-          <div id="homeHold"></div>
         </div>
       </div>
     </section>
@@ -445,19 +473,16 @@ function render(){
   hTotal.textContent=won(c.acct);
   hChg.innerHTML=`<span class="${sgn(c.profit)}">최종 수익 ${sw(c.profit)} (${pct(c.profitR)})</span><span class="muted">연평균 ${pct(c.xirr)}</span>`;
   hDep.textContent=won(c.dep); hCash.textContent=won(D.cash); hBuy.textContent=won(c.buy); hVal.textContent=won(c.val);
-  retBox.innerHTML=[['평가차익',c.ev,''],['배당',c.divAll,'dv'],['매도손익',c.real,'']].map(([k,v,cl])=>`<div><div class="k">${k}</div><div class="v num ${cl||sgn(v)}">${man(v)}</div></div>`).join('');
-  divSub.textContent=`최근 12개월 ${won(c.ttmAll)}`;
-  divBox.innerHTML=`<div class="stat"><div class="k">올해 받은 배당</div><div class="v num dv">${won(c.thisYear)}</div></div>
-    <div class="stat"><div class="k">연 배당률(원금 기준)</div><div class="v num">${c.buy?pp(c.ttmHeld/c.buy):'-'}</div></div>`;
+  const row=(k,v,cls='',tot)=>`<div class="${tot?'tot':''}"><dt>${k}</dt><dd class="num ${cls}">${v}</dd></div>`;
+  retBox.innerHTML=row('평가차익',sw(c.ev),sgn(c.ev))+row('배당',sw(c.divAll),sgn(c.divAll))+row('매도손익',sw(c.real),sgn(c.real))+row('합계',sw(c.ev+c.divAll+c.real),sgn(c.ev+c.divAll+c.real),1);
+  divBox.innerHTML=row('올해 받은 배당',won(c.thisYear))+row('최근 12개월',won(c.ttmAll))+row('연 배당률 (원금 기준)',c.buy?pp(c.ttmHeld/c.buy):'-');
   const max=Math.max(...c.held.map(x=>Math.max(x.w,x.target)),0.01)*1.12;
   rebal.innerHTML=[...c.held].sort((a,b)=>Math.abs(b.adj)-Math.abs(a.adj)).map(h=>`<div class="rb"><div class="nm">${h.n}</div>
       <div class="adj num"><em>${h.adj>0?'매수':'매도'}</em>${man(Math.abs(h.adj))}</div>
       <div class="track"><i class="tg" style="width:${h.target/max*100}%"></i><i class="cu ${h.w>h.target?'cut':''}" style="width:${Math.min(h.w,h.target)/max*100}%"></i>${h.w>h.target?`<i class="ov" style="left:${h.target/max*100}%;width:${(h.w-h.target)/max*100}%"></i>`:''}</div>
       <div class="meta num">현재 ${pp(h.w,1)} · 목표 ${pp(h.target,0)}${h.w>h.target?` · <b>${pp(h.w-h.target,1)} 초과</b>`:''}</div></div>`).join('')+
     `<div class="legend" style="margin-top:12px"><span><b style="display:inline-block;background:var(--text-3);width:12px;height:6px;border-radius:3px"></b>현재 비중</span><span><b style="display:inline-block;background:var(--surface-2);box-shadow:inset 0 0 0 1px var(--line);width:12px;height:6px;border-radius:3px"></b>목표까지 남은 비중</span><span><b style="display:inline-block;background:var(--over);width:12px;height:6px;border-radius:3px"></b>목표 초과</span></div>`;
-  compBar.innerHTML=[...c.held].sort((a,b)=>b.val-a.val).map(h=>`<i style="width:${h.w*100}%;background:${h.color}" title="${h.n}"></i>`).join('')+`<i style="width:${D.cash/c.acct*100}%;background:var(--line)" title="잔여 금액"></i>`;
-  compLegend.innerHTML=[...c.held].sort((a,b)=>b.val-a.val).slice(0,4).map(h=>`<span><b style="display:inline-block;width:8px;height:8px;border-radius:2px;background:${h.color}"></b>${h.n} ${pp(h.w,1)}</span>`).join('')+`<span>외 ${c.held.length-4}종목</span>`;
-  homeHold.innerHTML=[...c.held].sort((a,b)=>b.val-a.val).slice(0,4).map(h=>holdRow(h)).join('');
+  drawTreemap(c);
   const hs=[...c.held].sort((a,b)=>b.val-a.val);
   const selN=st.detail||(innerWidth>=1100&&hs[0]?hs[0].n:'');
   holdList.innerHTML=hs.map(h=>holdRow(h,h.n===selN)).join('')+(c.sold.length?`<div class="sec">매도 완료 종목</div>`+c.sold.map(h=>holdRow(h,h.n===selN)).join(''):'');
@@ -509,11 +534,42 @@ function renderDetail(name,c=calc()){
   </div>`;
 }
 
+
+/* ===== 트리맵 (미국 증시 히트맵 방식): 칸 크기 = 평가금액 비중, 색 = 평가수익률 ===== */
+function squarify(items,x,y,w,h,out){
+  if(!items.length) return out;
+  const s=Math.min(w,h), worst=r=>{const sum=r.reduce((a,b)=>a+b.area,0),mx=Math.max(...r.map(b=>b.area)),mn=Math.min(...r.map(b=>b.area));return Math.max(s*s*mx/(sum*sum),sum*sum/(s*s*mn))};
+  let row=[],i=0;
+  while(i<items.length){const nx=[...row,items[i]]; if(!row.length||worst(nx)<=worst(row)){row=nx;i++} else break}
+  const sum=row.reduce((a,b)=>a+b.area,0);
+  if(w>=h){const rw=sum/h;let cy=y;row.forEach(b=>{const bh=b.area/rw;out.push({...b,x,y:cy,w:rw,h:bh});cy+=bh});return squarify(items.slice(i),x+rw,y,w-rw,h,out)}
+  const rh=sum/w;let cx=x;row.forEach(b=>{const bw=b.area/rh;out.push({...b,x:cx,y,w:bw,h:rh});cx+=bw});return squarify(items.slice(i),x,y+rh,w,h-rh,out);
+}
+function heat(r){
+  if(Math.abs(r)<0.005) return {bg:'var(--surface-2)',on:false};
+  const k=Math.round(22+Math.min(Math.abs(r)/0.3,1)*70);
+  return {bg:`color-mix(in srgb, ${r>0?'var(--up)':'var(--down)'} ${k}%, var(--surface-2))`,on:k>=48};
+}
+function drawTreemap(c=calc()){
+  const el=document.getElementById('treemap'); if(!el||!el.offsetParent) return;
+  const W=el.clientWidth,H=el.clientHeight; if(!W||!H) return;
+  const hs=[...c.held].sort((a,b)=>b.val-a.val), tot=hs.reduce((a,h)=>a+h.val,0);
+  const rects=squarify(hs.map(h=>({it:h,area:h.val/tot*W*H})),0,0,W,H,[]);
+  el.innerHTML=rects.map(({it:h,x,y,w,h:hh})=>{
+    const t=heat(h.evR), size=w>118&&hh>84?'':w>58&&hh>46?'sm':'xs';
+    const name=size==='xs'?h.ab:size==='sm'?core(h.n):h.n;
+    return `<button class="tile ${size} ${t.on?'on':''}" role="listitem" data-stock="${h.n}" aria-label="${h.n} 비중 ${pp(h.w,1)} 수익률 ${pct(h.evR)}"
+      style="left:${x/W*100}%;top:${y/H*100}%;width:${w/W*100}%;height:${hh/H*100}%;background:${t.bg}">
+      <span class="tn">${name}</span>${size==='xs'?'':`<span><span class="tp num" style="display:block">${pct(h.evR,1)}</span>${size?'':`<span class="tw num">비중 ${pp(h.w,1)}</span>`}</span>`}</button>`}).join('');
+}
+let tmT;addEventListener('resize',()=>{clearTimeout(tmT);tmT=setTimeout(()=>drawTreemap(),120)});
+
 /* ===== 이동 ===== */
 const isWide=()=>innerWidth>=1100;
 function go(v){
   document.querySelectorAll('.view').forEach(e=>e.classList.toggle('on',e.id==='v-'+v));
   document.querySelectorAll('.nav[data-go],.tab[data-go]').forEach(e=>e.classList.toggle('on',e.dataset.go===v));
+  if(v==='home') requestAnimationFrame(()=>drawTreemap());
   if(v==='hold'&&!isWide()){st.detail=null;holdListCard.style.display='';detailPane.style.display='none';render()}
   scrollTo(0,0);
 }
