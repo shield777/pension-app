@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" fill="#0B0B0E"/>
+  <!-- 보유 비중 트리맵 모티프: 칸 크기 = 비중 -->
+  <g transform="translate(96 96)">
+    <rect x="0"   y="0"   width="176" height="320" rx="22" fill="#F4F4F5"/>
+    <rect x="188" y="0"   width="132" height="176" rx="22" fill="#E5484D"/>
+    <rect x="188" y="188" width="60"  height="132" rx="18" fill="#71717A"/>
+    <rect x="260" y="188" width="60"  height="132" rx="18" fill="#3F3F46"/>
+  </g>
+</svg>
