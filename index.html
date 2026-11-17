@@ -147,7 +147,10 @@ button.stat:active{filter:brightness(.97)}
 @media (min-width:430px){.hold .nm small .wide{display:inline}}
 .sec{font-size:13px;font-weight:600;color:var(--text-3);margin:18px 4px 4px}
 
-.row{display:flex;align-items:center;gap:12px;padding:12px 0}
+.row{display:flex;align-items:center;gap:12px;padding:12px 0;width:100%;text-align:left;min-height:56px}
+.row:hover,.row:active{background:var(--surface-2)}
+.row .go{color:var(--text-3);margin-left:-6px}
+.row .mid small,.row .amt small{display:block}
 .row+.row{border-top:1px solid var(--line)}
 .tag{font-size:12px;font-weight:700;padding:4px 8px;border-radius:8px;flex:none;min-width:42px;text-align:center}
 .tag{color:var(--text-2);background:var(--surface-2)}
@@ -219,6 +222,8 @@ select.chip{-webkit-appearance:none;appearance:none;padding-right:30px;backgroun
 .badge{font-size:11px;font-weight:700;color:var(--text-2);background:var(--surface-2);padding:3px 8px;border-radius:99px;margin-left:6px;vertical-align:middle}
 
 .btn.ghost{background:var(--surface-2);color:var(--text)}
+.btn.danger{background:none;color:var(--up);margin-top:8px;height:48px;font-size:15px}
+.btn.danger:hover{background:var(--up-soft)}
 .btn:disabled{opacity:.5}
 .gate{position:fixed;inset:0;z-index:80;background:var(--bg);display:grid;place-items:center;padding:24px}
 .gate[hidden],.busy[hidden]{display:none}
@@ -345,6 +350,7 @@ select.chip{-webkit-appearance:none;appearance:none;padding-right:30px;backgroun
       <div class="top"><h1>매매·배당 내역</h1></div>
       <div class="chips" id="histChips"></div>
       <div class="sumline" id="histSum"></div>
+      <p class="muted" style="font-size:12.5px;padding:0 4px 8px">기록을 누르면 수정하거나 삭제할 수 있어요.</p>
       <div class="card"><div id="histList"></div></div>
     </section>
 
@@ -375,7 +381,7 @@ select.chip{-webkit-appearance:none;appearance:none;padding-right:30px;backgroun
 
 <div class="sheet" id="addSheet" role="dialog" aria-modal="true" aria-labelledby="addTitle">
   <div class="grab"></div>
-  <h3 id="addTitle">기록하기 <button class="icon-btn" data-close aria-label="닫기"><svg class="i"><use href="#i-x"/></svg></button></h3>
+  <h3 id="addTitle"><span id="addTitleT">기록하기</span> <button class="icon-btn" data-close aria-label="닫기"><svg class="i"><use href="#i-x"/></svg></button></h3>
   <div class="seg" id="seg">
     <button class="on" data-t="buy">매수</button><button data-t="sell">매도</button><button data-t="div">배당</button><button data-t="dep">입금</button>
   </div>
@@ -390,7 +396,8 @@ select.chip{-webkit-appearance:none;appearance:none;padding-right:30px;backgroun
     <div class="field" data-for="sell"><label for="fPl">손익(원)</label><input id="fPl" inputmode="text" autocomplete="off"><div class="hint">평단 기준으로 자동 계산돼요. 증권사 금액과 다르면 고쳐주세요.</div></div>
     <div class="field" data-for="div dep"><label for="fAmt" id="fAmtL">금액(원)</label><input id="fAmt" inputmode="numeric" placeholder="0" autocomplete="off"></div>
     <div class="preview" id="fPrev"></div>
-    <button class="btn" type="submit">저장</button>
+    <button class="btn" type="submit" id="fSubmit">저장</button>
+    <button class="btn danger" type="button" id="fDelete" hidden>이 기록 삭제</button>
     <div class="xl"><svg class="i s"><use href="#i-sheet"/></svg><span id="xlNote"></span></div>
   </form>
 </div>
@@ -448,9 +455,9 @@ const daysBetween=(a,b)=>Math.round((new Date(b)-new Date(a))/864e5);
 
 /* ===== 엑셀과 같은 계산 =====
    I열(매수총액 누적) = 매수금액 합 - 매도금액 합 + 매도손익 합 → 매도하면 '평단×수량'만큼 원금이 줄어듦 */
-function costAt(name,date){ // 그 날짜까지의 보유수량·매수총액 (배당내역 E·F열과 같은 값)
+function costAt(name,date,skipRow){ // 그 날짜까지의 보유수량·매수총액 (배당내역 E·F열과 같은 값)
   let q=0,c=0;
-  D.tx.filter(x=>x.n===name&&x.d<=date).sort((a,b)=>a.d.localeCompare(b.d)||a.row-b.row).forEach(x=>{
+  D.tx.filter(x=>x.n===name&&x.d<=date&&x.row!==skipRow).sort((a,b)=>a.d.localeCompare(b.d)||a.row-b.row).forEach(x=>{
     if(x.t==='buy'){q+=x.q;c+=x.a}else{q-=x.q;c-=x.a-x.pl}});
   return {q,c};
 }
@@ -502,9 +509,10 @@ function txRow(x,withName=true){
   if(x.t==='buy'||x.t==='sell'){sub+=`${sep()}${x.q.toLocaleString()}주 × ${Math.round(x.a/x.q).toLocaleString()}원`;
     if(x.t==='sell') extra=`<small class="${sgn(x.pl)}">손익 ${sw(x.pl)}</small>`}
   else if(x.t==='div'){sub+=x.q?`${sep()}${x.q.toLocaleString()}주 보유`:'';extra=x.y!=null?`<small class="dv">배당률 ${pp(x.y)}</small>`:''}
-  return `<div class="row"><span class="tag ${x.t}">${TL[x.t]}</span>
-    <div class="mid"><b>${name}</b><small class="num">${sub}</small></div>
-    <div class="amt num">${won(x.a)}${extra}</div></div>`;
+  return `<button class="row" data-edit="${x.t==='buy'||x.t==='sell'?'tx':x.t}:${x.row}" aria-label="${TL[x.t]} ${name} ${won(x.a)} 수정 또는 삭제">
+    <span class="tag ${x.t}">${TL[x.t]}</span>
+    <span class="mid"><b>${name}</b><small class="num">${sub}</small></span>
+    <span class="amt num">${won(x.a)}${extra}</span><svg class="i s go"><use href="#i-chev"/></svg></button>`;
 }
 const allEvents=()=>[...D.tx,...D.div.map(x=>({...x,t:'div'})),...D.dep.map(x=>({...x,t:'dep'}))];
 const byDate=a=>[...a].sort((x,y)=>y.d.localeCompare(x.d)||(y.row||0)-(x.row||0));
@@ -636,6 +644,7 @@ document.addEventListener('click',e=>{
   const t=e.target.closest('button'); if(!t) return;
   if(t.dataset.go) go(t.dataset.go);
   if(t.dataset.stock) openDetail(t.dataset.stock);
+  if(t.dataset.edit){const [k,r]=t.dataset.edit.split(':');openEdit(k,+r)}
   if(t.dataset.dtab){st.dtab=t.dataset.dtab;render()}
   if(t.hasAttribute('data-closedetail')){st.detail=null;holdListCard.style.display='';detailPane.style.display='none';render()}
   if(t.dataset.f){st.f=t.dataset.f;render()}
@@ -654,9 +663,11 @@ function toast(m){toastEl.textContent=m;toastEl.classList.add('on');clearTimeout
 let type='buy', plTouched=false;
 const toN=v=>{const s=String(v).trim();const n=+s.replace(/[^\d]/g,'')||0;return s.startsWith('-')?-n:n};
 const fmtIn=i=>{const raw=i.value.trim(),n=toN(raw);i.value=n?(n<0?'-':'')+Math.abs(n).toLocaleString():(raw==='-'?'-':'')};
-[fQty,fAmt2,fAmt,cAmt,fPl].forEach(i=>i.addEventListener('input',()=>{fmtIn(i);if(i===fPl)plTouched=true;upd()}));
+[fQty,fAmt2,fAmt,cAmt,fPl].forEach(i=>i.addEventListener('input',()=>{fmtIn(i);if(i===fPl)plTouched=true;else if(i===fQty||i===fAmt2)plTouched=false;upd()}));
 fCode.onchange=()=>{plTouched=false;fNewWrap.hidden=fCode.value!=='__new__';upd()}; fDate.onchange=upd;
+let editing=null; // 수정 중인 기록 {kind:'tx'|'div'|'dep', rec}
 function openAdd(){
+  editing=null; addTitleT.textContent='기록하기'; fSubmit.textContent='저장'; fDelete.hidden=true; seg.hidden=false; seg.querySelectorAll('button').forEach(b=>b.hidden=false); seg.style.gridTemplateColumns='';
   fCode.innerHTML=STOCKS.filter(s=>s.held).map(s=>`<option value="${s.n}">${s.n}</option>`).join('')+`<option value="__new__">＋ 새 종목 (처음 사는 종목)</option><optgroup label="매도 완료 종목">${STOCKS.filter(s=>!s.held).map(s=>`<option value="${s.n}">${s.n}</option>`).join('')}</optgroup>`;
   etfList.innerHTML=(D.etfNames||[]).map(n=>`<option value="${n}">`).join('');
   if(st.detail) fCode.value=st.detail;
@@ -678,7 +689,7 @@ function setType(t){type=t;plTouched=false;
 }
 function upd(){
   const n=fCode.value, d=fDate.value||D.asof, row=(k,v)=>`<div><span>${k}</span><b class="num">${v}</b></div>`;
-  const {q,c}=costAt(n,d);
+  const {q,c}=costAt(n,d,editing&&editing.kind==='tx'?editing.rec.row:undefined);
   if(type==='buy'){const Q=toN(fQty.value),A=toN(fAmt2.value);
     fPrev.innerHTML=row('단가',Q&&A?Math.round(A/Q).toLocaleString()+'원':'-')+row('매수 후 보유',`${(q+Q).toLocaleString()}주`)+row('매수 후 평단',q+Q?Math.round((c+A)/(q+Q)).toLocaleString()+'원':'-')}
   if(type==='sell'){const Q=toN(fQty.value),A=toN(fAmt2.value),avg=q?c/q:0;
@@ -689,6 +700,18 @@ function upd(){
   if(type==='dep'){const A=toN(fAmt.value),k=calc();
     fPrev.innerHTML=row('입력 후 총 입금액',won(k.dep+A))+row('입력 후 최종 수익률',pct((k.acct)/(k.dep+A)-1))+`<div style="font-size:12.5px;color:var(--text-3)">입금한 돈이 잔여 금액에 들어왔다면 잔여 금액도 수정해 주세요.</div>`}
 }
+function openEdit(kind,row){
+  const rec=(kind==='tx'?D.tx:kind==='div'?D.div:D.dep).find(x=>x.row===row); if(!rec) return;
+  openAdd(); editing={kind,rec};
+  addTitleT.textContent='기록 수정'; fSubmit.textContent='수정 내용 저장'; fDelete.hidden=false;
+  if(kind==='tx'){seg.querySelectorAll('button').forEach(b=>b.hidden=!(b.dataset.t==='buy'||b.dataset.t==='sell'));seg.style.gridTemplateColumns='1fr 1fr'} else seg.hidden=true;
+  fDate.value=rec.d;
+  if(kind!=='dep'){ if(![...fCode.options].some(o=>o.value===rec.n)) fCode.insertAdjacentHTML('afterbegin',`<option value="${rec.n}">${rec.n}</option>`); fCode.value=rec.n; }
+  setType(kind==='tx'?rec.t:kind);
+  if(kind==='tx'){fQty.value=rec.q.toLocaleString();fAmt2.value=rec.a.toLocaleString();fPl.value=rec.pl?(rec.pl<0?'-':'')+Math.abs(rec.pl).toLocaleString():'';plTouched=rec.t==='sell'}
+  else fAmt.value=rec.a.toLocaleString();
+  fNewWrap.hidden=true; upd();
+}
 addForm.onsubmit=async e=>{e.preventDefault();
   const d=fDate.value; if(!d) return toast('날짜를 입력해주세요');
   let x;
@@ -697,17 +720,36 @@ addForm.onsubmit=async e=>{e.preventDefault();
     x={d,t:type,n,q,a,pl:type==='sell'?toN(fPl.value):0};}
   else{const a=toN(fAmt.value);if(!a)return toast('금액을 입력해주세요');
     x=type==='div'?{d,t:'div',n:fCode.value,a}:{d,t:'dep',a};}
+  const ed=editing;
   if(DEMO){
-    if(x.t==='buy'||x.t==='sell') D.tx.push({row:1e9+D.tx.length,...x});
+    if(ed){ Object.assign(ed.rec,x.t==='div'||x.t==='dep'?{d:x.d,a:x.a,...(x.n?{n:x.n}:{})}:x);
+      if(ed.kind==='div'){const {q,c}=costAt(ed.rec.n,ed.rec.d);Object.assign(ed.rec,{q,cost:c,y:c?ed.rec.a/c:null})} }
+    else if(x.t==='buy'||x.t==='sell') D.tx.push({row:1e9+D.tx.length,...x});
     else if(x.t==='div'){const {q,c}=costAt(x.n,d);D.div.push({row:1e9+D.div.length,d,n:x.n,q,cost:c,y:c?x.a/c:null,a:x.a})}
     else D.dep.push({row:1e9+D.dep.length,d,a:x.a});
-    closeSheets();render();return toast(`${TL[type]} 기록 완료 (시안이라 엑셀엔 저장 안 돼요)`);
+    closeSheets();paint();return toast(`${TL[type]} 기록 ${ed?'수정':'완료'} (시안이라 엑셀엔 저장 안 돼요)`);
   }
   await saveToExcel(async()=>{
-    if(x.t==='buy'||x.t==='sell') await XL.addTrade(x,D);
+    if(ed){
+      if(ed.kind==='tx') await XL.editTrade(ed.rec,x,D);
+      else if(ed.kind==='div') await XL.editDividend(ed.rec,x);
+      else await XL.editDeposit(ed.rec,x);
+    }
+    else if(x.t==='buy'||x.t==='sell') await XL.addTrade(x,D);
     else if(x.t==='div') await XL.addDividend(x);
     else await XL.addDeposit(x);
-  },`${TL[type]} 기록을 엑셀에 저장했어요`);
+  },ed?`${TL[type]} 기록을 수정했어요`:`${TL[type]} 기록을 엑셀에 저장했어요`);
+};
+fDelete.onclick=async()=>{
+  const ed=editing; if(!ed) return;
+  const r=ed.rec, label=ed.kind==='dep'?`입금 ${won(r.a)}`:`${r.n} ${ed.kind==='div'?'배당':TL[r.t]} ${won(r.a)}`;
+  if(!confirm(`${r.d.replace(/-/g,'.')} ${label}\n이 기록을 삭제할까요? 엑셀에서도 지워져요.`)) return;
+  if(DEMO){ const arr=ed.kind==='tx'?D.tx:ed.kind==='div'?D.div:D.dep; arr.splice(arr.indexOf(r),1); closeSheets();paint(); return toast('기록을 삭제했어요 (시안)'); }
+  await saveToExcel(async()=>{
+    if(ed.kind==='tx') await XL.deleteTrade(r,D);
+    else if(ed.kind==='div') await XL.deleteDividend(r);
+    else await XL.deleteDeposit(r);
+  },'기록을 삭제했어요');
 };
 cSave.onclick=async()=>{const v=toN(cAmt.value);
   if(DEMO){D.cash=v;closeSheets();render();return toast('잔여 금액을 수정했어요')}

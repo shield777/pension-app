@@ -156,38 +156,110 @@ const XL = (() => {
     await withSession(async ss => {
       const r = meta.lastTx + 1, prev = Math.max(4, meta.lastTx);
       const nf = await copyFormat(S.trade, `B${prev}:H${prev}`);
-      await patch(S.trade, `B${r}:H${r}`, {
-        formulas: [[toSerial(x.d), x.t === 'sell' ? '매도' : '매수', x.n, x.q, `=G${r}/E${r}`, x.a, x.t === 'sell' ? x.pl : '']],
-        numberFormat: nf
-      }, ss);
-      await syncLists(x, D, ss);
+      await patch(S.trade, `B${r}:H${r}`, { formulas: [tradeRow(x, r)], numberFormat: nf }, ss);
+      await reconcileLists([...D.tx, x], ss);
     });
   }
-  // 보유종목 / 매도내역 목록 자동 정리
-  async function syncLists(x, D, ss) {
-    const b = meta.block, inHold = b.hold.find(s => s.n === x.n), inSold = b.sold.find(s => s.n === x.n);
-    const qty = D.tx.filter(t => t.n === x.n).reduce((a, t) => a + (t.t === 'buy' ? t.q : -t.q), 0) + (x.t === 'buy' ? x.q : -x.q);
-    const R1 = async (sheet, addr) => (await read(sheet, addr, 'formulasR1C1')).formulasR1C1;
-    if (x.t === 'buy' && !inHold) {
-      // 새 종목(또는 매도 완료 종목 재매수) → 보유 목록 마지막 행 위치에 칸 삽입
-      // (합계 수식 범위 안쪽에 넣어야 SUM 범위와 T2 드롭다운 범위가 자동으로 늘어남)
-      if (inSold) await remove(S.trade, `T${inSold.row}:AN${inSold.row}`, ss);
-      const at = b.holdEnd;
-      await insert(S.trade, `T${at}:AN${at}`, ss);
-      // 삽입 후 한 칸 내려간 기존 행의 수식을 복사 (절대참조가 이미 새 위치로 조정된 상태)
-      const row = (await R1(S.trade, `T${at + 1}:AN${at + 1}`))[0].slice();
-      row[0] = x.n; row[3] = inSold ? (inSold.target || 0) : 0; // T=종목명, W=관리비중(새 종목은 0 → 엑셀에서 직접 입력)
-      await patch(S.trade, `T${at}:AN${at}`, { formulasR1C1: [row] }, ss);
-    } else if (x.t === 'sell' && inHold && qty <= 0) {
-      // 전량 매도 → "매도내역 (미보유)" 끝에 추가한 뒤 보유 목록에서 삭제
-      const at = b.soldEnd + 1;
-      await insert(S.trade, `T${at}:AN${at}`, ss);
-      const src = b.sold.length ? b.soldEnd : inHold.row; // 기존 매도 종목 행이 있으면 그 수식 형태를 따름
-      const row = (await R1(S.trade, `T${src}:AN${src}`))[0].slice();
-      row[0] = x.n; row[3] = inHold.target || 0;
-      await patch(S.trade, `T${at}:AN${at}`, { formulasR1C1: [row] }, ss);
-      await remove(S.trade, `T${inHold.row}:AN${inHold.row}`, ss);
+  const tradeRow = (x, r) => [toSerial(x.d), x.t === 'sell' ? '매도' : '매수', x.n, x.q, `=G${r}/E${r}`, x.a, x.t === 'sell' ? x.pl : ''];
+
+  // 보유종목 / 매도내역 목록을 매매내역에 맞게 정리 (한 번에 하나씩 고치고, 행 번호가 바뀌므로 매번 다시 읽음)
+  //  - 보유 수량이 있는데 보유 목록에 없으면 → 추가
+  //  - 보유 목록에 있는데 수량이 0이면 → 매도내역으로 이동 (매매 기록이 아예 없으면 목록에서 제거)
+  async function reconcileLists(txAfter, ss) {
+    const qty = {}, has = {};
+    txAfter.forEach(t => { qty[t.n] = (qty[t.n] || 0) + (t.t === 'buy' ? t.q : -t.q); has[t.n] = true; });
+    const R1 = async addr => (await g('GET', `${await rng(S.trade, addr)}?$select=formulasR1C1`, null, ss)).formulasR1C1;
+    for (let guard = 0; guard < 8; guard++) {
+      const blk = await g('GET', `${await rng(S.trade, 'T1:AN60')}?$select=values,formulas`, null, ss);
+      const b = parseBlock(blk.values, blk.formulas);
+      const inHold = n => b.hold.find(s => s.n === n), inSold = n => b.sold.find(s => s.n === n);
+      const toAdd = Object.keys(qty).find(n => qty[n] > 0 && !inHold(n));
+      const zero = b.hold.find(s => !(qty[s.n] > 0));
+      const ghost = b.sold.find(s => !has[s.n]);
+      if (toAdd) {
+        const old = inSold(toAdd);
+        if (old) { await remove(S.trade, `T${old.row}:AN${old.row}`, ss); continue; } // 다음 바퀴에서 보유 목록에 추가
+        // 보유 목록 마지막 행 위치에 칸 삽입 (합계 수식 범위 안쪽이라 SUM·드롭다운 범위가 자동으로 늘어남)
+        const at = b.holdEnd;
+        await insert(S.trade, `T${at}:AN${at}`, ss);
+        const row = (await R1(`T${at + 1}:AN${at + 1}`))[0].slice();
+        row[0] = toAdd; row[3] = meta.block?.sold.find(s => s.n === toAdd)?.target || 0; // T=종목명, W=관리비중(새 종목은 0)
+        await patch(S.trade, `T${at}:AN${at}`, { formulasR1C1: [row] }, ss);
+      } else if (zero) {
+        if (has[zero.n] && b.soldHeader) {
+          // 전량 매도 → "매도내역 (미보유)" 끝에 추가한 뒤 보유 목록에서 삭제
+          const at = b.soldEnd + 1;
+          await insert(S.trade, `T${at}:AN${at}`, ss);
+          const src = b.sold.length ? b.soldEnd : zero.row;
+          const row = (await R1(`T${src}:AN${src}`))[0].slice();
+          row[0] = zero.n; row[3] = zero.target || 0;
+          await patch(S.trade, `T${at}:AN${at}`, { formulasR1C1: [row] }, ss);
+        }
+        if (b.hold.length > 1) await remove(S.trade, `T${zero.row}:AN${zero.row}`, ss); else break;
+      } else if (ghost) {
+        await remove(S.trade, `T${ghost.row}:AN${ghost.row}`, ss);
+      } else break;
     }
+  }
+
+  /* ---------- 수정 / 삭제 ---------- */
+  // 저장 전에 엑셀의 그 행이 앱이 알고 있는 기록과 같은지 확인 (다른 곳에서 엑셀을 고친 경우 엉뚱한 행을 건드리지 않도록)
+  async function verify(sheet, addr, expect, ss) {
+    const v = (await g('GET', `${await rng(sheet, addr)}?$select=values`, null, ss)).values[0];
+    const same = expect.every((e, i) => e === undefined || (isNum(e) ? Math.abs((+v[i] || 0) - e) < 0.5 : String(v[i] ?? '').trim() === e));
+    if (!same) throw new Error('엑셀 내용이 앱과 달라요. 오른쪽 위 새로고침(↻) 후 다시 시도해 주세요.');
+  }
+  // 한 행 삭제: 칸을 지우지 않고 아래 내용을 한 줄씩 위로 올림 (다른 칸의 수식 참조가 깨지지 않음)
+  async function shiftUp(sheet, c1, c2, row, last, ss) {
+    if (last > row) {
+      const f = (await g('GET', `${await rng(sheet, `${c1}${row + 1}:${c2}${last}`)}?$select=formulasR1C1`, null, ss)).formulasR1C1;
+      await patch(sheet, `${c1}${row}:${c2}${last - 1}`, { formulasR1C1: f }, ss);
+    }
+    await g('POST', `${await rng(sheet, `${c1}${last}:${c2}${last}`)}/clear`, { applyTo: 'Contents' }, ss);
+  }
+  const txExpect = o => [toSerial(o.d), o.t === 'sell' ? '매도' : '매수', o.n, o.q, undefined, o.a];
+  async function editTrade(o, x, D) {
+    await withSession(async ss => {
+      await verify(S.trade, `B${o.row}:G${o.row}`, txExpect(o), ss);
+      await patch(S.trade, `B${o.row}:H${o.row}`, { formulas: [tradeRow(x, o.row)] }, ss);
+      await reconcileLists(D.tx.map(t => t.row === o.row ? { ...t, ...x } : t), ss);
+    });
+  }
+  async function deleteTrade(o, D) {
+    await withSession(async ss => {
+      await verify(S.trade, `B${o.row}:G${o.row}`, txExpect(o), ss);
+      await shiftUp(S.trade, 'B', 'H', o.row, meta.lastTx, ss);
+      await reconcileLists(D.tx.filter(t => t.row !== o.row), ss);
+    });
+  }
+  const divExpect = o => [toSerial(o.d), '퇴직연금', o.n, undefined, undefined, undefined, o.a];
+  async function editDividend(o, x) {
+    await withSession(async ss => {
+      await verify(S.div, `B${o.row}:H${o.row}`, divExpect(o), ss);
+      await patch(S.div, `B${o.row}`, { values: [[toSerial(x.d)]] }, ss);
+      await patch(S.div, `D${o.row}`, { values: [[x.n]] }, ss);
+      await patch(S.div, `H${o.row}`, { values: [[x.a]] }, ss);
+    });
+  }
+  async function deleteDividend(o) {
+    await withSession(async ss => {
+      await verify(S.div, `B${o.row}:H${o.row}`, divExpect(o), ss);
+      await shiftUp(S.div, 'B', 'I', o.row, meta.lastDiv, ss);
+    });
+  }
+  const depExpect = o => [toSerial(o.d), undefined, o.a];
+  async function editDeposit(o, x) {
+    await withSession(async ss => {
+      await verify(S.dep, `B${o.row}:D${o.row}`, depExpect(o), ss);
+      await patch(S.dep, `B${o.row}`, { values: [[toSerial(x.d)]] }, ss);
+      await patch(S.dep, `D${o.row}`, { values: [[x.a]] }, ss);
+    });
+  }
+  async function deleteDeposit(o) {
+    await withSession(async ss => {
+      await verify(S.dep, `B${o.row}:D${o.row}`, depExpect(o), ss);
+      await shiftUp(S.dep, 'B', 'D', o.row, meta.lastDep, ss); // E·F열(연평균 수익률 계산용 수식)은 그대로 둠
+    });
   }
   async function addDividend(x) {
     await withSession(async ss => {
@@ -221,5 +293,5 @@ const XL = (() => {
     return todo.length;
   }
 
-  return { init, login, logout, user, load, cached, path, setPath, ensureDepositLink, setCash, addTrade, addDividend, addDeposit, writePrices, colOf };
+  return { init, login, logout, user, load, cached, path, setPath, ensureDepositLink, setCash, addTrade, addDividend, addDeposit, editTrade, deleteTrade, editDividend, deleteDividend, editDeposit, deleteDeposit, writePrices, colOf };
 })();
