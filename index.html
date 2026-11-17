@@ -488,7 +488,13 @@ function calc(){
     const val=q*s.price, ev=s.held?val-c:0, divSum=dv.reduce((a,x)=>a+x.a,0), real=tx.reduce((a,x)=>a+(x.t==='sell'?x.pl:0),0);
     const ttm=dv.filter(x=>x.d>yAgo).reduce((a,x)=>a+x.a,0);
     const ds=tx.map(x=>x.d).sort();
-    return {...s,qty:q,cost:c,avg:q?c/q:0,val,ev,evR:c?val/c-1:0,div:divSum,real,total:ev+divSum+real,totalR:c?(ev+divSum+real)/c:0,
+    // 종목별 총수익률: 지금까지 번 돈 ÷ 지금까지 그 종목을 산 금액 합계 (일부를 팔아도 부풀려지지 않고, 전량 매도 종목도 계산됨)
+    const buys=tx.reduce((a,x)=>a+(x.t==='buy'?x.a:0),0), total=ev+divSum+real;
+    // 연환산 수익률: 매수(−)·매도(+)·배당(+)과 현재 평가금액(+)의 날짜·금액으로 계산 (계좌 연평균 수익률과 같은 방식)
+    const end=s.held&&val>0?today:(ds[ds.length-1]||today), yrs=ds[0]?daysBetween(ds[0],end)/365:0;
+    const cf=[...tx.map(x=>[x.t==='buy'?-x.a:x.a,x.d]),...dv.map(x=>[x.a,x.d]),...(s.held&&val>0?[[val,today]]:[])].sort((a,b)=>a[1].localeCompare(b[1]));
+    const ann=yrs>=1&&buys?xirr(cf):null;
+    return {...s,qty:q,cost:c,avg:q?c/q:0,val,ev,evR:c?val/c-1:0,div:divSum,real,total,totalR:buys?total/buys:0,buys,ann,yrs,
       ttm,ttmY:c?ttm/c:0,mktY:val?ttm/val:0,first:ds[0],last:ds[ds.length-1]};
   });
   const held=list.filter(h=>h.held);
@@ -514,7 +520,7 @@ const logo=s=>`<span class="logo" style="--dot:${s.held?(s.ev>0?'var(--up)':s.ev
 function holdRow(h,sel){
   if(!h.held) return `<button class="hold ${sel?'sel':''}" data-stock="${esc(h.n)}">${logo(h)}
     <span class="nm"><b>${esc(h.n)}</b><small>전량 매도</small></span>
-    <span class="rt"><b class="num ${sgn(h.total)}">${sw(h.total)}</b><small class="muted">매도손익+배당</small></span></button>`;
+    <span class="rt"><b class="num ${sgn(h.total)}">${sw(h.total)}</b><small class="num ${sgn(h.totalR)}">${pct(h.totalR)}</small></span></button>`;
   return `<button class="hold ${sel?'sel':''}" data-stock="${esc(h.n)}">${logo(h)}
     <span class="nm"><b>${esc(h.n)}</b><small class="num">${h.qty.toLocaleString()}주 · ${h.price?`비중 ${pp(h.w,1)}`:'시세 없음 (ETF시세 시트에 종목명 확인)'}</small></span>
     <span class="rt"><b class="num">${h.price?won(h.val):'-'}</b><small class="num ${h.price?sgn(h.ev):'muted'}">${h.price?pct(h.evR):'-'}</small></span></button>`;
@@ -587,22 +593,26 @@ function renderDetail(name,c=calc()){
     ${h.held?`<div class="muted" style="font-size:14px">평가금액</div>
     <div class="num" style="font-size:30px;font-weight:750;letter-spacing:-.02em;line-height:1.25">${won(h.val)}</div>
     <div class="num ${sgn(h.ev)}" style="font-weight:600;margin-bottom:16px">평가차익 ${sw(h.ev)} (${pct(h.evR)})</div>`:
-    `<div class="muted" style="font-size:14px">전량 매도한 종목 · 매도손익+배당</div><div class="num ${sgn(h.total)}" style="font-size:28px;font-weight:750;margin-bottom:16px">${sw(h.total)}</div>`}
+    `<div class="muted" style="font-size:14px">전량 매도한 종목 · 매도손익 + 배당</div><div class="num ${sgn(h.total)}" style="font-size:28px;font-weight:750;margin-bottom:16px">${sw(h.total)}</div>`}
     <div class="kv">
       ${h.held?`<div class="stat"><div class="k">보유 수량</div><div class="v num">${h.qty.toLocaleString()}주</div></div>
       <div class="stat"><div class="k">평단</div><div class="v num">${Math.round(h.avg).toLocaleString()}원</div></div>
       <div class="stat"><div class="k">매수 총액</div><div class="v num">${won(h.cost)}</div></div>`:''}
       <div class="stat"><div class="k">누적 배당</div><div class="v num dv">${won(h.div)}</div></div>
       <div class="stat"><div class="k">매도 손익</div><div class="v num ${sgn(h.real)}">${sw(h.real)}</div></div>
-      ${h.held?`<div class="stat"><div class="k">종목별 총수익</div><div class="v num ${sgn(h.total)}">${man(h.total)} <small>${pct(h.totalR,1)}</small></div></div>`:''}
+      <div class="stat"><div class="k">종목별 총수익</div><div class="v num ${sgn(h.total)}">${sw(h.total)}</div></div>
     </div>
-    ${h.held?`<dl class="dl" style="margin-top:16px">
+    <dl class="dl" style="margin-top:16px">
+      <dt>누적 수익률<small>(총수익 ÷ 누적 매수 ${man(h.buys)})</small></dt><dd class="num ${sgn(h.totalR)}">${pct(h.totalR)}</dd>
+      <dt>연환산 수익률<small>(매수·매도·배당 시점 반영)</small></dt><dd class="num ${h.ann==null?'muted':sgn(h.ann)}">${h.ann==null?'보유 1년 미만':pct(h.ann)}</dd>
+    ${h.held?`
       <dt>연 배당률<small>(최근 12개월 ÷ 매수총액)</small></dt><dd class="num dv">${pp(h.ttmY)}</dd>
       <dt>시가 배당률<small>(최근 12개월 ÷ 평가금액)</small></dt><dd class="num">${pp(h.mktY)}</dd>
       <dt>현재 / 목표 비중</dt><dd class="num">${pp(h.w,1)} / ${pp(h.target,0)}</dd>
       <dt>조정 금액</dt><dd class="num">${h.adj>0?'매수':'매도'} ${won(Math.abs(h.adj))}</dd>
-      <dt>보유 기간 · 최근 매수</dt><dd class="num">${h.first?`${(daysBetween(h.first,today)/365).toFixed(1)}년 · ${daysBetween(h.last,today)}일 전`:'-'}</dd>
-    </dl>`:''}
+      <dt>보유 기간 · 최근 매수</dt><dd class="num">${h.first?`${(daysBetween(h.first,today)/365).toFixed(1)}년 · ${daysBetween(h.last,today)}일 전`:'-'}</dd>`:
+      `<dt>보유했던 기간</dt><dd class="num">${h.first?h.yrs.toFixed(1)+'년':'-'}</dd>`}
+    </dl>
   </div>
   <div class="card" style="margin-top:12px">
     <div class="subtabs"><button class="${st.dtab==='tx'?'on':''}" data-dtab="tx">매매 ${tx.length}건</button><button class="${st.dtab==='div'?'on':''}" data-dtab="div">배당 ${dv.length}건</button></div>

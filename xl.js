@@ -100,7 +100,7 @@ const XL = (() => {
     const soldHeader = (() => { for (let i = r; i <= vals.length; i++) if (T(i).startsWith('매도내역')) return i; return 0; })();
     const sold = []; if (soldHeader) for (let i = soldHeader + 1; i <= vals.length && T(i); i++) sold.push(i);
     const depRow = rowOf('입금 금액'), cashRow = rowOf('잔여 금액');
-    const stock = rr => ({ n: T(rr), fee: cell(rr, 21), target: isNum(cell(rr, 23)) ? cell(rr, 23) : 0, price: isNum(cell(rr, 28)) ? cell(rr, 28) : 0, row: rr, aa: String(forms[rr - 1]?.[7] ?? '') });
+    const stock = rr => ({ n: T(rr), fee: cell(rr, 21), target: isNum(cell(rr, 23)) ? cell(rr, 23) : 0, price: isNum(cell(rr, 28)) ? cell(rr, 28) : 0, row: rr, aa: String(forms[rr - 1]?.[7] ?? ''), ah: String(forms[rr - 1]?.[14] ?? ''), aj: String(forms[rr - 1]?.[16] ?? '') });
     return {
       hold: hold.map(stock), sold: sold.map(stock), soldHeader,
       holdStart: 4, holdEnd: hold.length ? hold[hold.length - 1] : 3, soldEnd: sold.length ? sold[sold.length - 1] : soldHeader,
@@ -152,9 +152,12 @@ const XL = (() => {
      1) 입금 금액 → 입금내역 합계에 연결
      2) 매수 총액(AA열): "가장 최근 날짜의 누적값 중 최댓값" → "그 종목의 마지막 행 누적값"
         (같은 날 같은 종목을 여러 번 매매해도 맞게 나옴. 앱이 매매를 날짜 순서로 넣기 때문에 마지막 행 = 최신 상태)
-     3) 배당내역 총매수(F열): 같은 방식으로, 지급일까지의 마지막 행 누적값 */
+     3) 배당내역 총매수(F열): 같은 방식으로, 지급일까지의 마지막 행 누적값
+     4) 종목별 수익율(AJ열): 총수익 ÷ 현재 매수총액 → 총수익 ÷ 누적 매수금액
+        (일부를 판 종목이 부풀려지지 않고, 전량 매도 종목도 계산됨) */
   const AA_NEW = r => `=IFERROR(LOOKUP(2,1/($D$4:$D$5000=$T${r}),$I$4:$I$5000),0)`;
   const DIVF_NEW = r => `=IFERROR(LOOKUP(2,1/((퇴직연금!$D$4:$D$5000=$D${r})*(퇴직연금!$B$4:$B$5000<=$B${r})),퇴직연금!$I$4:$I$5000),0)`;
+  const AJ_NEW = r => `=IFERROR(AH${r}/SUMIFS($G:$G,$D:$D,$T${r},$C:$C,"매수"),0)`;
   async function ensureFormulas() {
     const done = [], b = meta.block; if (!b) return done;
     if (b.depRow && String(b.depFormula).replace(/\s/g, '') !== '=입금내역!D3') {
@@ -166,6 +169,18 @@ const XL = (() => {
         for (const h of b.hold) if (/MAXIFS/i.test(h.aa)) await patch(S.trade, `AA${h.row}`, { formulas: [[AA_NEW(h.row)]] }, ss);
       });
       done.push('매수 총액 수식(AA열)을 마지막 행 기준으로 바꿨어요');
+    }
+    const ajOld = h => /^=\s*AH\d+\s*\/\s*AA\d+\s*$/i.test(h.aj);
+    const ajHold = b.hold.filter(ajOld), ajSold = b.sold.filter(h => (!h.aj || ajOld(h)) && h.ah);
+    if (ajHold.length || ajSold.length) {
+      await withSession(async ss => {
+        for (const h of ajHold) await patch(S.trade, `AJ${h.row}`, { formulas: [[AJ_NEW(h.row)]] }, ss);
+        if (ajSold.length && b.hold.length) {
+          const nf = (await sget(S.trade, `AJ${b.hold[0].row}`, 'numberFormat', ss)).numberFormat;
+          for (const h of ajSold) await patch(S.trade, `AJ${h.row}`, { formulas: [[AJ_NEW(h.row)]], numberFormat: nf }, ss);
+        }
+      });
+      done.push('종목별 수익율 수식(AJ열)을 누적 매수금액 기준으로 바꿨어요');
     }
     if (meta.lastPensionDiv && store.get('divFormulaOk', '') !== '1') {
       const last = meta.lastDiv, cf = (await read(S.div, `C4:F${last}`, 'formulas')).formulas;
