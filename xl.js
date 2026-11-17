@@ -7,6 +7,7 @@ const XL = (() => {
   const CLIENT_ID = 'c37e15f3-c0d2-47d2-b031-ccbc894a7a8d';
   const SCOPES = ['Files.ReadWrite', 'User.Read'];
   const GRAPH = 'https://graph.microsoft.com/v1.0';
+  const INTEREST = '예수금 이자'; // 배당내역 시트에 이 종목명으로 이자를 기록
   const S = { trade: '퇴직연금', div: '배당내역', dep: '입금내역', price: 'ETF시세' };
   const store = {
     get(k, d) { try { return localStorage.getItem(k) ?? d; } catch { return d; } },
@@ -85,7 +86,7 @@ const XL = (() => {
   async function withSession(fn) {
     const s = await g('POST', `${await wb()}/createSession`, { persistChanges: true });
     try { return await fn(s.id); }
-    finally { g('POST', `${await wb()}/closeSession`, null, s.id).catch(() => {}); }
+    finally { await g('POST', `${await wb()}/closeSession`, null, s.id).catch(() => {}); }
   }
 
   /* ---------- 읽기 ---------- */
@@ -125,10 +126,11 @@ const XL = (() => {
     tr.values.forEach((v, i) => {
       if (isNum(v[0]) && v[2]) { lastTx = i + 4; tx.push({ row: i + 4, d: fromSerial(v[0]), t: v[1] === '매도' ? 'sell' : 'buy', n: String(v[2]).trim(), q: +v[3] || 0, a: +v[5] || 0, pl: +v[6] || 0 }); }
     });
-    const div = []; let lastDiv = 3, lastPensionDiv = 0;
+    const div = [], int = []; let lastDiv = 3, lastPensionDiv = 0;
     dv.values.forEach((v, i) => {
       if (isNum(v[0]) || v[2]) lastDiv = i + 4;
-      if (isNum(v[0]) && v[1] === '퇴직연금') { lastPensionDiv = i + 4; div.push({ row: i + 4, d: fromSerial(v[0]), n: String(v[2]).trim(), q: +v[3] || 0, cost: +v[4] || 0, y: isNum(v[5]) ? v[5] : null, a: +v[6] || 0 }); }
+      if (isNum(v[0]) && v[1] === '퇴직연금' && String(v[2]).trim() === INTEREST) int.push({ row: i + 4, d: fromSerial(v[0]), n: INTEREST, a: +v[6] || 0 });
+      else if (isNum(v[0]) && v[1] === '퇴직연금') { lastPensionDiv = i + 4; div.push({ row: i + 4, d: fromSerial(v[0]), n: String(v[2]).trim(), q: +v[3] || 0, cost: +v[4] || 0, y: isNum(v[5]) ? v[5] : null, a: +v[6] || 0 }); }
     });
     const dep = []; let lastDep = 3;
     dp.values.forEach((v, i) => { if (isNum(v[0]) && isNum(v[2])) { lastDep = i + 4; dep.push({ row: i + 4, d: fromSerial(v[0]), a: v[2] }); } });
@@ -137,7 +139,7 @@ const XL = (() => {
     meta = { lastTx, lastDiv, lastPensionDiv, lastDep, block: b, priceRow, codeOf, lastPriceRow };
     const data = {
       asof: new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10), cash: +b.cash || 0,
-      hold: b.hold.map(addCode), sold: b.sold.map(addCode), tx, div, dep,
+      hold: b.hold.map(addCode), sold: b.sold.map(addCode), tx, div, int, dep,
       etfNames: Object.keys(codeOf), live: true, loadedAt: new Date().toISOString()
     };
     store.set('pensionCache', JSON.stringify(data));
@@ -191,7 +193,7 @@ const XL = (() => {
   }
   async function freshDiv(ss) {
     const v = (await sget(S.div, 'B4:D1500', 'values', ss)).values; let last = 3, lastPension = 0;
-    v.forEach((r, i) => { if (isNum(r[0]) || r[2]) last = i + 4; if (isNum(r[0]) && r[1] === '퇴직연금') lastPension = i + 4; });
+    v.forEach((r, i) => { if (isNum(r[0]) || r[2]) last = i + 4; if (isNum(r[0]) && r[1] === '퇴직연금' && String(r[2]).trim() !== INTEREST) lastPension = i + 4; });
     return { last, lastPension };
   }
   async function freshDep(ss) {
@@ -348,6 +350,25 @@ const XL = (() => {
       await patch(S.div, `H${r}`, { values: [[x.a]], numberFormat: [[nf[0][6]]] }, ss);
     });
   }
+  // 이자: 배당내역 시트에 종목명 '예수금 이자'로 한 줄 (보유수량·총매수·배당률 칸은 비움)
+  async function addInterest(x) {
+    await withSession(async ss => {
+      const fd = await freshDiv(ss), r = fd.last + 1, tplRow = fd.lastPension || fd.last;
+      const nf = (await sget(S.div, `B${tplRow}:H${tplRow}`, 'numberFormat', ss)).numberFormat;
+      await patch(S.div, `B${r}:D${r}`, { values: [[toSerial(x.d), '퇴직연금', INTEREST]], numberFormat: [nf[0].slice(0, 3)] }, ss);
+      await patch(S.div, `H${r}`, { values: [[x.a]], numberFormat: [[nf[0][6]]] }, ss);
+    });
+  }
+  // 잔여 금액을 delta만큼 더하거나 뺌. 보유 목록이 바뀌면 칸 위치가 달라지므로 위치를 다시 찾음
+  async function adjustCash(delta) {
+    if (!delta) return;
+    await withSession(async ss => {
+      const blk = await sget(S.trade, 'T1:AN60', 'values,formulas', ss), b = parseBlock(blk.values, blk.formulas);
+      if (!b.cashRow) throw new Error('엑셀에서 "잔여 금액" 칸을 찾지 못했어요.');
+      if (String(blk.formulas[b.cashRow - 1][1]).startsWith('=')) return; // 수식이 들어 있으면 건드리지 않음
+      await patch(S.trade, 'U' + b.cashRow, { values: [[(+b.cash || 0) + delta]] }, ss);
+    });
+  }
   async function addDeposit(x) {
     await withSession(async ss => {
       const lastDep = await freshDep(ss), r = lastDep + 1, prev = Math.max(4, lastDep);
@@ -401,5 +422,5 @@ const XL = (() => {
     return true;
   }
 
-  return { init, login, logout, user, load, cached, path, setPath, ensureFormulas, usePrices, setCash, addTrade, addDividend, addDeposit, editTrade, deleteTrade, editDividend, deleteDividend, editDeposit, deleteDeposit, writePrices, colOf };
+  return { init, login, logout, user, load, cached, path, setPath, ensureFormulas, usePrices, setCash, addTrade, addDividend, addDeposit, addInterest, adjustCash, INTEREST, editTrade, deleteTrade, editDividend, deleteDividend, editDeposit, deleteDeposit, writePrices, colOf };
 })();
