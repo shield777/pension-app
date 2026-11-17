@@ -18,7 +18,7 @@ const XL = (() => {
   /* ---------- 날짜: 엑셀 일련번호 <-> YYYY-MM-DD ---------- */
   const EPOCH = Date.UTC(1899, 11, 30);
   const toSerial = d => { const [y, m, dd] = d.split('-').map(Number); return (Date.UTC(y, m - 1, dd) - EPOCH) / 864e5; };
-  const fromSerial = n => new Date(EPOCH + Math.round(n) * 864e5).toISOString().slice(0, 10);
+  const fromSerial = n => new Date(EPOCH + Math.floor(n + 1e-6) * 864e5).toISOString().slice(0, 10);
   const isNum = v => typeof v === 'number' && !isNaN(v);
   const colOf = n => { let s = ''; while (n > 0) { const m = (n - 1) % 26; s = String.fromCharCode(65 + m) + s; n = Math.floor((n - 1) / 26); } return s; };
 
@@ -52,9 +52,11 @@ const XL = (() => {
     if (session) headers['workbook-session-id'] = session;
     for (let attempt = 0; attempt < 3; attempt++) {
       const r = await fetch(url.startsWith('http') ? url : GRAPH + url, { method, headers, body: body ? JSON.stringify(body) : undefined });
-      if (r.status === 429 || r.status === 503 || r.status === 504) { await new Promise(ok => setTimeout(ok, 1500 * (attempt + 1))); continue; }
+      const retriable = r.status === 429 || (method === 'GET' && (r.status === 503 || r.status === 504));
+      if (retriable && attempt < 2) { await new Promise(ok => setTimeout(ok, 1500 * (attempt + 1))); continue; }
       if (!r.ok) {
         let msg = r.status + ''; try { const j = await r.json(); msg = j.error?.message || msg; } catch {}
+        if (r.status === 504 || r.status === 503) msg = '마이크로소프트 서버 응답이 늦어요. 새로고침(↻)으로 저장됐는지 확인한 뒤 다시 시도해 주세요.';
         if (r.status === 404) msg = '엑셀 파일을 찾지 못했어요. 설정에서 파일 위치를 확인해 주세요. (' + msg + ')';
         if (r.status === 423 || /locked/i.test(msg)) msg = '엑셀 파일이 잠겨 있어요. PC에서 파일을 닫거나 잠시 후 다시 시도해 주세요.';
         throw new Error(msg);
@@ -105,6 +107,10 @@ const XL = (() => {
     };
   }
   async function load() {
+    try { return await loadOnce(); }
+    catch (e) { if (!store.get('xlItemId', null)) throw e; store.del('xlItemId'); itemId = null; return loadOnce(); }
+  }
+  async function loadOnce() {
     const [tr, blk, dv, dp, px] = await Promise.all([
       read(S.trade, 'B4:H600'),
       read(S.trade, 'T1:AN60', 'values,formulas'),
@@ -152,20 +158,61 @@ const XL = (() => {
   }
   async function copyFormat(sheet, fromAddr) { return (await read(sheet, fromAddr, 'numberFormat')).numberFormat; }
 
-  async function addTrade(x, D) {
-    await withSession(async ss => {
-      const r = meta.lastTx + 1, prev = Math.max(4, meta.lastTx);
-      const nf = await copyFormat(S.trade, `B${prev}:H${prev}`);
-      await patch(S.trade, `B${r}:H${r}`, { formulas: [tradeRow(x, r)], numberFormat: nf }, ss);
-      await reconcileLists([...D.tx, x], ss);
-    });
+  /* 저장 직전에 엑셀의 실제 마지막 행을 다시 읽음 (앱을 켠 뒤 PC에서 엑셀에 행을 추가했어도 덮어쓰지 않도록) */
+  const sget = async (sheet, addr, sel, ss) => g('GET', `${await rng(sheet, addr)}?$select=${sel}`, null, ss);
+  async function freshTrades(ss) {
+    const v = (await sget(S.trade, 'B4:D600', 'values', ss)).values; let last = 3; const rows = [];
+    v.forEach((r, i) => { if (isNum(r[0]) && r[2]) { last = i + 4; rows.push({ row: i + 4, s: Math.floor(r[0] + 1e-6) }); } });
+    return { last, rows };
+  }
+  async function freshDiv(ss) {
+    const v = (await sget(S.div, 'B4:D1500', 'values', ss)).values; let last = 3, lastPension = 0;
+    v.forEach((r, i) => { if (isNum(r[0]) || r[2]) last = i + 4; if (isNum(r[0]) && r[1] === '퇴직연금') lastPension = i + 4; });
+    return { last, lastPension };
+  }
+  async function freshDep(ss) {
+    const v = (await sget(S.dep, 'B4:D300', 'values', ss)).values; let last = 3;
+    v.forEach((r, i) => { if (isNum(r[0]) && isNum(r[2])) last = i + 4; });
+    return last;
   }
   const tradeRow = (x, r) => [toSerial(x.d), x.t === 'sell' ? '매도' : '매수', x.n, x.q, `=G${r}/E${r}`, x.a, x.t === 'sell' ? x.pl : ''];
+
+  // 매매 한 줄 넣기: 날짜 순서에 맞는 자리에 넣음.
+  // (엑셀의 매수총액은 "그 종목의 가장 최근 날짜 행"의 누적값을 읽으므로, 지난 날짜 기록을 맨 아래에 붙이면 계산에서 빠짐)
+  async function insertTrade(x, ss) {
+    const { last, rows } = await freshTrades(ss);
+    const after = rows.find(r => r.s > toSerial(x.d));
+    const pos = after ? after.row : last + 1, prev = Math.max(4, last), end = last + 1;
+    const nf = (await sget(S.trade, `B${prev}:H${prev}`, 'numberFormat', ss)).numberFormat;
+    if (after) {
+      const f = (await sget(S.trade, `B${pos}:H${last}`, 'formulasR1C1', ss)).formulasR1C1;
+      await patch(S.trade, `B${pos + 1}:H${end}`, { formulasR1C1: f }, ss);
+      await patch(S.trade, `B${end}:H${end}`, { numberFormat: nf }, ss);
+      await patch(S.trade, `B${pos}:H${pos}`, { formulas: [tradeRow(x, pos)] }, ss);
+    } else {
+      await patch(S.trade, `B${pos}:H${pos}`, { formulas: [tradeRow(x, pos)], numberFormat: nf }, ss);
+    }
+    // A열(종목별 순번)·I열(매수총액 누적) 수식이 준비된 행을 넘어가면 윗줄 수식을 이어 붙임
+    if (end > 4 && !(await sget(S.trade, `I${end}`, 'formulas', ss)).formulas[0][0]) {
+      for (const col of ['A', 'I']) {
+        const f = (await sget(S.trade, `${col}${end - 1}`, 'formulasR1C1', ss)).formulasR1C1;
+        if (f[0][0]) await patch(S.trade, `${col}${end}`, { formulasR1C1: f }, ss);
+      }
+    }
+  }
+  async function addTrade(x, D) {
+    await withSession(async ss => {
+      await insertTrade(x, ss);
+      await reconcileLists([...D.tx, x], [x.n], ss);
+    });
+  }
 
   // 보유종목 / 매도내역 목록을 매매내역에 맞게 정리 (한 번에 하나씩 고치고, 행 번호가 바뀌므로 매번 다시 읽음)
   //  - 보유 수량이 있는데 보유 목록에 없으면 → 추가
   //  - 보유 목록에 있는데 수량이 0이면 → 매도내역으로 이동 (매매 기록이 아예 없으면 목록에서 제거)
-  async function reconcileLists(txAfter, ss) {
+  //  - 이번에 기록을 넣거나 고친 종목만 대상. 엑셀에 미리 적어둔 다른 종목은 건드리지 않음
+  async function reconcileLists(txAfter, touchedNames, ss) {
+    const touched = new Set(touchedNames);
     const qty = {}, has = {};
     txAfter.forEach(t => { qty[t.n] = (qty[t.n] || 0) + (t.t === 'buy' ? t.q : -t.q); has[t.n] = true; });
     const R1 = async addr => (await g('GET', `${await rng(S.trade, addr)}?$select=formulasR1C1`, null, ss)).formulasR1C1;
@@ -173,9 +220,10 @@ const XL = (() => {
       const blk = await g('GET', `${await rng(S.trade, 'T1:AN60')}?$select=values,formulas`, null, ss);
       const b = parseBlock(blk.values, blk.formulas);
       const inHold = n => b.hold.find(s => s.n === n), inSold = n => b.sold.find(s => s.n === n);
-      const toAdd = Object.keys(qty).find(n => qty[n] > 0 && !inHold(n));
-      const zero = b.hold.find(s => !(qty[s.n] > 0));
-      const ghost = b.sold.find(s => !has[s.n]);
+      if (!b.hold.length) break; // 보유 목록 형태를 알 수 없으면 손대지 않음
+      const toAdd = [...touched].find(n => qty[n] > 0 && !inHold(n));
+      const zero = b.hold.find(s => touched.has(s.n) && !(qty[s.n] > 0));
+      const ghost = b.sold.find(s => touched.has(s.n) && !has[s.n]);
       if (toAdd) {
         const old = inSold(toAdd);
         if (old) { await remove(S.trade, `T${old.row}:AN${old.row}`, ss); continue; } // 다음 바퀴에서 보유 목록에 추가
@@ -221,15 +269,19 @@ const XL = (() => {
   async function editTrade(o, x, D) {
     await withSession(async ss => {
       await verify(S.trade, `B${o.row}:G${o.row}`, txExpect(o), ss);
-      await patch(S.trade, `B${o.row}:H${o.row}`, { formulas: [tradeRow(x, o.row)] }, ss);
-      await reconcileLists(D.tx.map(t => t.row === o.row ? { ...t, ...x } : t), ss);
+      if (x.d === o.d) await patch(S.trade, `B${o.row}:H${o.row}`, { formulas: [tradeRow(x, o.row)] }, ss);
+      else { // 날짜가 바뀌면 빼냈다가 날짜 순서에 맞는 자리에 다시 넣음
+        await shiftUp(S.trade, 'B', 'H', o.row, (await freshTrades(ss)).last, ss);
+        await insertTrade(x, ss);
+      }
+      await reconcileLists(D.tx.map(t => t.row === o.row ? { ...t, ...x } : t), [o.n, x.n], ss);
     });
   }
   async function deleteTrade(o, D) {
     await withSession(async ss => {
       await verify(S.trade, `B${o.row}:G${o.row}`, txExpect(o), ss);
-      await shiftUp(S.trade, 'B', 'H', o.row, meta.lastTx, ss);
-      await reconcileLists(D.tx.filter(t => t.row !== o.row), ss);
+      await shiftUp(S.trade, 'B', 'H', o.row, (await freshTrades(ss)).last, ss);
+      await reconcileLists(D.tx.filter(t => t.row !== o.row), [o.n], ss);
     });
   }
   const divExpect = o => [toSerial(o.d), '퇴직연금', o.n, undefined, undefined, undefined, o.a];
@@ -244,7 +296,7 @@ const XL = (() => {
   async function deleteDividend(o) {
     await withSession(async ss => {
       await verify(S.div, `B${o.row}:H${o.row}`, divExpect(o), ss);
-      await shiftUp(S.div, 'B', 'I', o.row, meta.lastDiv, ss);
+      await shiftUp(S.div, 'B', 'I', o.row, (await freshDiv(ss)).last, ss);
     });
   }
   const depExpect = o => [toSerial(o.d), undefined, o.a];
@@ -258,12 +310,12 @@ const XL = (() => {
   async function deleteDeposit(o) {
     await withSession(async ss => {
       await verify(S.dep, `B${o.row}:D${o.row}`, depExpect(o), ss);
-      await shiftUp(S.dep, 'B', 'D', o.row, meta.lastDep, ss); // E·F열(연평균 수익률 계산용 수식)은 그대로 둠
+      await shiftUp(S.dep, 'B', 'D', o.row, await freshDep(ss), ss); // E·F열(연평균 수익률 계산용 수식)은 그대로 둠
     });
   }
   async function addDividend(x) {
     await withSession(async ss => {
-      const r = meta.lastDiv + 1, tplRow = meta.lastPensionDiv || meta.lastDiv;
+      const fd = await freshDiv(ss), r = fd.last + 1, tplRow = fd.lastPension || fd.last;
       const [nf, f] = await Promise.all([copyFormat(S.div, `B${tplRow}:H${tplRow}`), read(S.div, `E${tplRow}:G${tplRow}`, 'formulasR1C1')]);
       await patch(S.div, `B${r}:D${r}`, { values: [[toSerial(x.d), '퇴직연금', x.n]], numberFormat: [nf[0].slice(0, 3)] }, ss);
       await patch(S.div, `E${r}:G${r}`, { formulasR1C1: f.formulasR1C1, numberFormat: [nf[0].slice(3, 6)] }, ss);
@@ -272,7 +324,7 @@ const XL = (() => {
   }
   async function addDeposit(x) {
     await withSession(async ss => {
-      const r = meta.lastDep + 1, prev = Math.max(4, meta.lastDep);
+      const lastDep = await freshDep(ss), r = lastDep + 1, prev = Math.max(4, lastDep);
       const nf = await copyFormat(S.dep, `B${prev}:D${prev}`);
       await patch(S.dep, `B${r}:D${r}`, { values: [[toSerial(x.d), '퇴직연금', x.a]], numberFormat: nf }, ss);
       // 연평균 수익률(XIRR) 계산용 E·F열 수식이 다음 행까지 있어야 함
