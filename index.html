@@ -388,7 +388,7 @@ select.chip{-webkit-appearance:none;appearance:none;padding-right:30px;backgroun
   <form id="addForm" novalidate>
     <div class="field"><label for="fDate" id="fDateL">일자</label><input type="date" id="fDate" required></div>
     <div class="field" data-for="buy sell div"><label for="fCode">종목명</label><select id="fCode"></select></div>
-    <div class="field" id="fNewWrap" hidden><label for="fNew">새 종목명</label><input id="fNew" list="etfList" autocomplete="off" placeholder="예: TIGER 미국배당다우존스"><datalist id="etfList"></datalist><div class="hint">ETF시세 시트에 있는 이름 그대로 입력하면 시세가 연결돼요. 보유 목록에 자동으로 추가되고, 관리비중은 엑셀에서 직접 넣어주세요.</div></div>
+    <div class="field" id="fNewWrap" hidden><label for="fNew">새 종목명</label><input id="fNew" list="etfList" autocomplete="off" placeholder="예: TIGER 미국배당다우존스"><datalist id="etfList"></datalist><div class="hint">이름 일부를 입력하면 KRX 상장 ETF 목록에서 고를 수 있어요. 보유 목록과 ETF시세 시트에 자동으로 추가되고, 관리비중만 엑셀에서 직접 넣어주세요.</div></div>
     <div class="two" data-for="buy sell">
       <div class="field"><label for="fQty">수량(주)</label><input id="fQty" inputmode="numeric" placeholder="0" autocomplete="off"></div>
       <div class="field"><label for="fAmt2">금액(원)</label><input id="fAmt2" inputmode="numeric" placeholder="0" autocomplete="off"></div>
@@ -685,7 +685,7 @@ let editing=null; // 수정 중인 기록 {kind:'tx'|'div'|'dep', rec}
 function openAdd(){
   editing=null; addTitleT.textContent='기록하기'; fSubmit.textContent='저장'; fDelete.hidden=true; seg.hidden=false; seg.querySelectorAll('button').forEach(b=>b.hidden=false); seg.style.gridTemplateColumns='';
   fCode.innerHTML=STOCKS.filter(s=>s.held).map(s=>`<option value="${esc(s.n)}">${esc(s.n)}</option>`).join('')+`<option value="__new__">＋ 새 종목 (처음 사는 종목)</option><optgroup label="매도 완료 종목">${STOCKS.filter(s=>!s.held).map(s=>`<option value="${esc(s.n)}">${esc(s.n)}</option>`).join('')}</optgroup>`;
-  etfList.innerHTML=(D.etfNames||[]).map(n=>`<option value="${esc(n)}">`).join('');
+  etfList.innerHTML=allEtfNames().map(n=>`<option value="${esc(n)}">`).join('');
   if(st.detail) fCode.value=st.detail;
   fNewWrap.hidden=fCode.value!=='__new__'; fNew.value='';
   fDate.value=todayStr();
@@ -736,7 +736,7 @@ addForm.onsubmit=async e=>{e.preventDefault();
     x={d,t:type,n,q,a,pl:type==='sell'?toN(fPl.value):0};
     const own=costAt(n,d,editing&&editing.kind==='tx'?editing.rec.row:undefined).q;
     if(type==='sell'&&q>own) return toast(`그 날짜 보유 수량(${own.toLocaleString()}주)보다 많이 매도할 수 없어요`);
-    if(fCode.value==='__new__'&&!DEMO&&(D.etfNames||[]).length&&!D.etfNames.includes(n)&&!confirm(`"${n}"은(는) 엑셀 ETF시세 시트에 없는 이름이에요.\n이대로 저장하면 시세를 못 찾아 평가금액이 계산되지 않아요.\n그래도 저장할까요?`)) return;}
+    if(fCode.value==='__new__'&&!DEMO&&allEtfNames().length&&!allEtfNames().includes(n)&&!confirm(`"${n}"은(는) KRX ETF 목록에 없는 이름이에요.\n이대로 저장하면 시세를 못 찾아 평가금액이 계산되지 않아요.\n그래도 저장할까요?`)) return;}
   else{const a=toN(fAmt.value);if(!a)return toast('금액을 입력해주세요');
     x=type==='div'?{d,t:'div',n:fCode.value,a}:{d,t:'dep',a};
     if(type==='div'&&costAt(x.n,d).q<=0&&!confirm('지급일 기준으로 이 종목의 보유 수량이 없어요.\n종목이나 날짜가 맞는지 확인해 주세요. 그래도 저장할까요?')) return;}
@@ -789,9 +789,12 @@ let wasWide=isWide();addEventListener('resize',()=>{if(wasWide!==isWide()){wasWi
 /* ===== 시작: 시안(미리보기)이면 내장 데이터, 실제 앱이면 엑셀에서 불러오기 ===== */
 let PX=null;
 const pxReady=fetch('prices.json',{cache:'no-store'}).then(r=>r.ok?r.json():null).then(j=>PX=j).catch(()=>null);
+let PXN=null; // 종목명 → 코드
+const pxNames=()=>{ if(!PXN&&PX&&PX.items){PXN={};for(const c in PX.items){const n=PX.items[c].n;if(n)PXN[n]=c}} return PXN||{}; };
+const allEtfNames=()=>[...new Set([...(D.etfNames||[]),...Object.keys(pxNames())])];
 function applyPrices(){
   if(!PX||!PX.items) return;
-  let hit=0; STOCKS.forEach(s=>{const it=s.code&&PX.items[s.code]; if(it&&it.c){s.price=it.c;hit++}});
+  let hit=0; STOCKS.forEach(s=>{if(!s.code)s.code=pxNames()[s.n]||null;const it=s.code&&PX.items[s.code]; if(it&&it.c){s.price=it.c;hit++}});
   if(hit){D.asof=PX.asof;D.priceSource=PX.source}
 }
 function paint(){
@@ -804,9 +807,11 @@ function refresh(quiet){ return refreshing||(refreshing=doRefresh(quiet).finally
 async function doRefresh(quiet){
   syncBtn.classList.add('spinning');
   try{
-    D=await XL.load(); await pxReady; paint();
-    if(await XL.ensureDepositLink()){ D=await XL.load(); paint(); toast('엑셀 입금 금액(U18)을 입금내역 합계에 연결했어요'); }
-    XL.writePrices(PX,D).then(n=>{ if(n) toast(`엑셀 ETF시세 시트에 ${n}개 종목 시세를 반영했어요`) }).catch(e=>console.warn('시세 반영 실패',e));
+    D=await XL.load(); await pxReady; XL.usePrices(PX); paint();
+    const fixed=await XL.ensureFormulas();
+    if(fixed.length){ D=await XL.load(); paint(); toast('엑셀 수식을 정비했어요: '+fixed.join(' / '),6000); }
+    // 시세·시가총액 반영 후 엑셀이 다시 계산한 값을 한 번 더 읽음
+    XL.writePrices(PX).then(async n=>{ if(n){ D=await XL.load(); paint(); toast(`엑셀 ETF시세 시트에 ${n}개 종목의 종가·시가총액을 반영했어요`) } }).catch(e=>console.warn('시세 반영 실패',e));
     if(!quiet) toast('엑셀에서 최신 내용을 불러왔어요');
   }catch(err){ console.error(err); toast((D.loadedAt?'최신 내용을 불러오지 못해 마지막으로 불러온 내용을 보여드려요: ':'엑셀을 불러오지 못했어요: ')+err.message,5000); }
   finally{ syncBtn.classList.remove('spinning'); }

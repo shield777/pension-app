@@ -9,18 +9,44 @@ KST = dt.timezone(dt.timedelta(hours=9))
 UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124 Safari/537.36"
 
 
+def num(v):
+    try:
+        return int(float(str(v).replace(",", "")))
+    except ValueError:
+        return 0
+
+
 def from_krx():
     if not (os.getenv("KRX_ID") and os.getenv("KRX_PW")):
         raise RuntimeError("KRX_ID/KRX_PW 시크릿이 없음")
-    from pykrx import stock
     today = dt.datetime.now(KST).date()
     for back in range(10):
         d = (today - dt.timedelta(days=back)).strftime("%Y%m%d")
-        df = stock.get_etf_ohlcv_by_ticker(d)
-        if df is not None and len(df) and df["종가"].sum() > 0:
-            items = {str(t): {"c": int(r["종가"])} for t, r in df.iterrows()}
+        items = krx_day(d)
+        if items:
             return {"source": "KRX", "asof": f"{d[:4]}-{d[4:6]}-{d[6:]}", "items": items}
     raise RuntimeError("KRX: 최근 10일 데이터 없음")
+
+
+def krx_day(d):
+    """하루치 ETF 전종목: 종목명(n)·종가(c)·시가총액(mc). 휴일이면 빈 값."""
+    try:  # KRX '전종목 시세' 원본 (시가총액·종목명 포함)
+        from pykrx.website.krx.etx.core import 전종목시세_ETF
+        df = 전종목시세_ETF().fetch(d)
+        items = {}
+        for _, r in df.iterrows():
+            c = num(r.get("TDD_CLSPRC"))
+            if c:
+                items[str(r["ISU_SRT_CD"])] = {"n": str(r.get("ISU_ABBRV", "")).strip(), "c": c, "mc": num(r.get("MKTCAP"))}
+        if items:
+            return items
+    except Exception as e:  # pykrx 내부 구조가 바뀐 경우 아래 공개 함수로
+        print("KRX 원본 조회 실패, 기본 함수로 다시 시도:", e)
+    from pykrx import stock
+    df = stock.get_etf_ohlcv_by_ticker(d)
+    if df is not None and len(df) and df["종가"].sum() > 0:
+        return {str(t): {"c": int(r["종가"])} for t, r in df.iterrows() if int(r["종가"])}
+    return {}
 
 
 def from_naver():

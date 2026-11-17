@@ -99,7 +99,7 @@ const XL = (() => {
     const soldHeader = (() => { for (let i = r; i <= vals.length; i++) if (T(i).startsWith('매도내역')) return i; return 0; })();
     const sold = []; if (soldHeader) for (let i = soldHeader + 1; i <= vals.length && T(i); i++) sold.push(i);
     const depRow = rowOf('입금 금액'), cashRow = rowOf('잔여 금액');
-    const stock = rr => ({ n: T(rr), fee: cell(rr, 21), target: isNum(cell(rr, 23)) ? cell(rr, 23) : 0, price: isNum(cell(rr, 28)) ? cell(rr, 28) : 0, row: rr });
+    const stock = rr => ({ n: T(rr), fee: cell(rr, 21), target: isNum(cell(rr, 23)) ? cell(rr, 23) : 0, price: isNum(cell(rr, 28)) ? cell(rr, 28) : 0, row: rr, aa: String(forms[rr - 1]?.[7] ?? '') });
     return {
       hold: hold.map(stock), sold: sold.map(stock), soldHeader,
       holdStart: 4, holdEnd: hold.length ? hold[hold.length - 1] : 3, soldEnd: sold.length ? sold[sold.length - 1] : soldHeader,
@@ -119,7 +119,8 @@ const XL = (() => {
       read(S.price, 'A2:C2500')
     ]);
     const codeOf = {}, priceRow = {};
-    px.values.forEach((v, i) => { if (v[1]) { codeOf[String(v[1]).trim()] = String(v[0]).trim(); priceRow[String(v[0]).trim()] = { row: i + 2, c: v[2] }; } });
+    let lastPriceRow = 1;
+    px.values.forEach((v, i) => { if (v[1]) { lastPriceRow = i + 2; codeOf[String(v[1]).trim()] = String(v[0]).trim(); priceRow[String(v[0]).trim()] = { row: i + 2, c: v[2] }; } });
     const tx = []; let lastTx = 3;
     tr.values.forEach((v, i) => {
       if (isNum(v[0]) && v[2]) { lastTx = i + 4; tx.push({ row: i + 4, d: fromSerial(v[0]), t: v[1] === '매도' ? 'sell' : 'buy', n: String(v[2]).trim(), q: +v[3] || 0, a: +v[5] || 0, pl: +v[6] || 0 }); }
@@ -133,7 +134,7 @@ const XL = (() => {
     dp.values.forEach((v, i) => { if (isNum(v[0]) && isNum(v[2])) { lastDep = i + 4; dep.push({ row: i + 4, d: fromSerial(v[0]), a: v[2] }); } });
     const b = parseBlock(blk.values, blk.formulas);
     const addCode = s => ({ ...s, code: codeOf[s.n] || null });
-    meta = { lastTx, lastDiv, lastPensionDiv, lastDep, block: b, priceRow };
+    meta = { lastTx, lastDiv, lastPensionDiv, lastDep, block: b, priceRow, codeOf, lastPriceRow };
     const data = {
       asof: new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10), cash: +b.cash || 0,
       hold: b.hold.map(addCode), sold: b.sold.map(addCode), tx, div, dep,
@@ -145,12 +146,35 @@ const XL = (() => {
   const cached = () => { try { return JSON.parse(store.get('pensionCache', 'null')); } catch { return null; } };
 
   /* ---------- 쓰기 ---------- */
-  // 입금 금액(U18 등)을 입금내역 합계에 연결 (최초 1회)
-  async function ensureDepositLink() {
-    const b = meta.block; if (!b?.depRow) return false;
-    if (String(b.depFormula).replace(/\s/g, '') === '=입금내역!D3') return false;
-    await patch(S.trade, 'U' + b.depRow, { formulas: [['=입금내역!D3']] });
-    return true;
+  /* 엑셀 수식 자동 정비 (필요할 때만 1회씩). 바꾼 내용을 문장 목록으로 돌려줌
+     1) 입금 금액 → 입금내역 합계에 연결
+     2) 매수 총액(AA열): "가장 최근 날짜의 누적값 중 최댓값" → "그 종목의 마지막 행 누적값"
+        (같은 날 같은 종목을 여러 번 매매해도 맞게 나옴. 앱이 매매를 날짜 순서로 넣기 때문에 마지막 행 = 최신 상태)
+     3) 배당내역 총매수(F열): 같은 방식으로, 지급일까지의 마지막 행 누적값 */
+  const AA_NEW = r => `=IFERROR(LOOKUP(2,1/($D$4:$D$5000=$T${r}),$I$4:$I$5000),0)`;
+  const DIVF_NEW = r => `=IFERROR(LOOKUP(2,1/((퇴직연금!$D$4:$D$5000=$D${r})*(퇴직연금!$B$4:$B$5000<=$B${r})),퇴직연금!$I$4:$I$5000),0)`;
+  async function ensureFormulas() {
+    const done = [], b = meta.block; if (!b) return done;
+    if (b.depRow && String(b.depFormula).replace(/\s/g, '') !== '=입금내역!D3') {
+      await patch(S.trade, 'U' + b.depRow, { formulas: [['=입금내역!D3']] });
+      done.push('입금 금액을 입금내역 합계에 연결했어요');
+    }
+    if (b.hold.some(h => /MAXIFS/i.test(h.aa))) {
+      await withSession(async ss => {
+        for (const h of b.hold) if (/MAXIFS/i.test(h.aa)) await patch(S.trade, `AA${h.row}`, { formulas: [[AA_NEW(h.row)]] }, ss);
+      });
+      done.push('매수 총액 수식(AA열)을 마지막 행 기준으로 바꿨어요');
+    }
+    if (meta.lastPensionDiv && store.get('divFormulaOk', '') !== '1') {
+      const last = meta.lastDiv, cf = (await read(S.div, `C4:F${last}`, 'formulas')).formulas;
+      const col = cf.map((r, i) => [r[0] === '퇴직연금' && /MAXIFS/i.test(String(r[3])) ? DIVF_NEW(i + 4) : r[3]]);
+      if (col.some((r, i) => r[0] !== cf[i][3])) {
+        await patch(S.div, `F4:F${last}`, { formulas: col });
+        done.push('배당내역 총매수 수식(F열)을 마지막 행 기준으로 바꿨어요');
+      }
+      store.set('divFormulaOk', '1');
+    }
+    return done;
   }
   async function setCash(v) {
     if (!meta.block?.cashRow) throw new Error('엑셀에서 "잔여 금액" 칸을 찾지 못했어요.');
@@ -202,6 +226,7 @@ const XL = (() => {
   }
   async function addTrade(x, D) {
     await withSession(async ss => {
+      if (x.t === 'buy') await ensureEtfRow(x.n, ss);
       await insertTrade(x, ss);
       await reconcileLists([...D.tx, x], [x.n], ss);
     });
@@ -274,6 +299,7 @@ const XL = (() => {
         await shiftUp(S.trade, 'B', 'H', o.row, (await freshTrades(ss)).last, ss);
         await insertTrade(x, ss);
       }
+      if (x.t === 'buy') await ensureEtfRow(x.n, ss);
       await reconcileLists(D.tx.map(t => t.row === o.row ? { ...t, ...x } : t), [o.n, x.n], ss);
     });
   }
@@ -335,15 +361,45 @@ const XL = (() => {
       }
     });
   }
-  // KRX 시세를 ETF시세 시트 C열(종가)에 반영 (보유·매도 종목만)
-  async function writePrices(px, D) {
-    if (!px?.items || store.get('pxWritten', '') === px.updated) return 0;
-    const codes = [...D.hold, ...D.sold].map(s => s.code).filter(Boolean);
-    const todo = codes.map(c => ({ c, p: px.items[c]?.c, pr: meta.priceRow[c] })).filter(o => o.p && o.pr && o.pr.c !== o.p);
-    if (todo.length) await withSession(async ss => { for (const o of todo) await patch(S.price, `C${o.pr.row}`, { values: [[o.p]] }, ss); });
-    store.set('pxWritten', px.updated);
-    return todo.length;
+  /* KRX 시세를 ETF시세 시트에 반영: 종가(C열)와 시가총액(L열), 시트에 있는 모든 종목. 시세가 새로 나왔을 때 하루 1번 */
+  async function writePrices(px) {
+    if (!px?.items || !meta.lastPriceRow || meta.lastPriceRow < 2) return 0;
+    const key = px.updated + '|' + meta.lastPriceRow;
+    if (store.get('pxWritten2', '') === key) return 0;
+    const last = meta.lastPriceRow;
+    const cur = (await read(S.price, `A2:L${last}`)).values;
+    let changed = 0;
+    const C = [], L = [];
+    cur.forEach(v => {
+      const it = px.items[String(v[0]).trim()];
+      const c = it && it.c ? it.c : v[2], mc = it && it.mc ? it.mc : v[11];
+      if (c !== v[2] || mc !== v[11]) changed++;
+      C.push([c]); L.push([mc]);
+    });
+    if (changed) await withSession(async ss => {
+      await patch(S.price, `C2:C${last}`, { values: C }, ss);
+      await patch(S.price, `L2:L${last}`, { values: L }, ss);
+    });
+    store.set('pxWritten2', key);
+    return changed;
+  }
+  /* 처음 사는 종목이 ETF시세 시트에 없으면 KRX 시세 목록에서 찾아 맨 아래에 한 줄 추가 (코드·이름·종가·시가총액) */
+  let pxRef = null;
+  const usePrices = px => { pxRef = px; };
+  const pxCodeOf = name => { if (!pxRef?.items) return null; for (const c in pxRef.items) if (pxRef.items[c].n === name) return c; return null; };
+  async function ensureEtfRow(name, ss) {
+    if (meta.codeOf?.[name]) return false;
+    const code = pxCodeOf(name); if (!code) return false;
+    const names = (await sget(S.price, 'B2:B2600', 'values', ss)).values;
+    let last = 1; let exists = false;
+    names.forEach((v, i) => { if (v[0]) { last = i + 2; if (String(v[0]).trim() === name) exists = true; } });
+    if (exists) return false;
+    const r = last + 1, it = pxRef.items[code];
+    await patch(S.price, `A${r}`, { numberFormat: [['@']] }, ss); // 종목코드는 글자로 (앞자리 0 유지)
+    await patch(S.price, `A${r}:C${r}`, { values: [[code, name, it.c || '']] }, ss);
+    if (it.mc) await patch(S.price, `L${r}`, { values: [[it.mc]] }, ss);
+    return true;
   }
 
-  return { init, login, logout, user, load, cached, path, setPath, ensureDepositLink, setCash, addTrade, addDividend, addDeposit, editTrade, deleteTrade, editDividend, deleteDividend, editDeposit, deleteDeposit, writePrices, colOf };
+  return { init, login, logout, user, load, cached, path, setPath, ensureFormulas, usePrices, setCash, addTrade, addDividend, addDeposit, editTrade, deleteTrade, editDividend, deleteDividend, editDeposit, deleteDeposit, writePrices, colOf };
 })();
